@@ -1,10 +1,14 @@
 using Agents, Random, DataFrames, LightGraphs
 using Distributions: Poisson, DiscreteNonParametric
 using CSV
+using Plots
+using LinearAlgebra:diagind
+using AgentsPlots
+using Images
 
 mutable struct agent <: AbstractAgent
     id::Int
-    pos::Int
+    pos::Tuple{Int,Int}
     days_infected::Int
     status::Symbol #1: S, 2: I, 3:R
 end
@@ -78,90 +82,62 @@ end
 rawdata = getDensityData()
 fullmap = generateDensity(rawdata, 80000, 123123123)
 sum(fullmap)
-
 gr()
 heatmap(fullmap)
 
-function model_initiation(;Ns, C, migration_rates, beta_undet, beta_det, infection_period = 8, reinfection_probability = 0.02,
-    detection_time = 14, death_rate = 0.02, Is=[zeros(Int, length(Ns)-1)...,1], seed=0)#Is infected per city, starts with 1 infected
+function model_initiation(beta_undet, beta_det, densitymap, infection_period = 8, reinfection_probability = 0.02,
+    detection_time = 14, death_rate = 0.02, seed=0)#Is infected per city, starts with 1 infected
 
     Random.seed!(seed)
-    @assert length(Ns)==length(Is)==length(beta_undet)==length(beta_det)==size(migration_rates,1) #lenght of all vectors is equal
-    @assert size(migration_rates,1) == size(migration_rates,2) #should be a square matrix
-
-    C = length(Ns) #number of cities
-    #normalize migration rates
-    migration_rates_sum = sum(migration_rates, dims=2) #sum of probability of migration to each city by summing up all individuals
-    for c in 1:C
-        migration_rates[c,:] ./= migration_rates_sum[c] #for each city, migration rate for all
-        #individuals is normalized by dividing through the sum of migration rates to the city
-    end
-
-    properties = Dict(:Ns=>Ns, :beta_det=> beta_det, :beta_undet=>beta_undet, :migration_rates=>migration_rates,
+    properties = Dict(:beta_det=> beta_det, :beta_undet=>beta_undet,
     :infection_period=>infection_period, :reinfection_probability=>reinfection_probability,
-    :detection_time=>detection_time, :C=> C, :death_rate=> death_rate)
+    :detection_time=>detection_time, :death_rate=> death_rate)
 
-    space = Space(complete_digraph(C))
+    xsize = width(densitymap)
+    ysize = height(densitymap)
+    space = Space((xsize, ysize), moore = true)
     model = ABM(agent, space; properties=properties)
 
     #add individuals
-    for city in 1:C, n in 1:Ns[city]
-        ind = add_agent!(city, model, 0, :S) #properties 0, :S are transferred to constructor
-        #resulting in days_infected_0, status:S
+    i = 1
+    for x in 1:xsize, y in 1:ysize
+        if densitymap[y,x] > 0
+            for j in 1:densitymap[y,x]
+                a = agent(i, (x,y), 0, :S)
+                add_agent_pos!(a, model)
+                i += 1
+            end
+        end
     end
 
-    #add infected individuals
-    for city in 1:C
-        inds = get_node_contents(city, model)
-        for n in 1:Is[city]
-            agent = id2agent(inds[n], model)
-            agent.status = :I
-            agent.days_infected = 1
+    #add random infected individuals close to munich with a low percentage in  the area
+    for x in 400:410, y in 100:110
+        inds = get_node_contents((x,y), model)
+        for n in inds
+            if rand()<0.01
+                agent = id2agent(n, model)
+                agent.status = :I
+                agent.days_infected = 1
+            end
         end
     end
 
     return model
 end
 
-using LinearAlgebra:diagind
+params = Dict(
+:beta_det=> 0.1,
+:beta_undet=> 0.2,
+:infection_period=> 10,
+:reinfection_probability=> 0.01,
+:detection_time=> 6,
+:death_rate=> 0.02)
 
-function create_params(;C, max_travel_rate, infection_period = 10, reinfection_probability = 0.02,
-    detection_time = 6, death_rate = 0.02, Is=[zeros(Int, C-1)..., 1], seed = 19)
+model = model_initiation(densitymap = fullmap; params...)#... is "splat" operator, passing all contents as argmuents
 
-    Random.seed!(seed)
-    Ns = rand(50:10000, C) #create C cities with populations between 50 and 5000
-    beta_undet = rand(0.3:0.02:0.6, C) #random prob for infection from undetected
-    beta_det = beta_undet ./ 10 #"." performs operation element-by-element on array
-
-    Random.seed!(seed)
-    #setting up the array of migration rates
-    migration_rates = zeros(C, C)
-    for c in 1:C
-        for c2 in 1:C
-            migration_rates[c,c2] = (Ns[c]+Ns[c2])/Ns[c]
-        end
-    end
-    maxM = maximum(migration_rates)
-    migration_rates = (migration_rates .* max_travel_rate)./maxM
-    migration_rates[diagind(migration_rates)] .= 1.0
-
-    params = Dict(:Ns=>Ns, :beta_det=> beta_det, :beta_undet=>beta_undet, :migration_rates=>migration_rates,
-    :infection_period=>infection_period, :reinfection_probability=>reinfection_probability,
-    :detection_time=>detection_time, :C=> C, :death_rate=> death_rate, :Is => Is)
-
-    return params
-end
-
-params = create_params(C=8, max_travel_rate=0.01)
-model = model_initiation(;params...)#... is "splat" operator, passing all contents as argmuents
-
-using AgentsPlots
-using Plots
-
+#old plotting method
 plotargs = (node_size	= 0.2, method = :circular, linealpha = 0.4)
-
 plotabm(model; plotargs...)
-
 #modify edges so that the reflect migration rate
 g = model.space.graph
 edgewidthsdict = Dict()
@@ -189,11 +165,9 @@ function agent_step!(agent, model)
 end
 
 function migrate!(agent, model)
-    nodeid = agent.pos
-    d = DiscreteNonParametric(1:model.properties[:C], model.properties[:migration_rates][nodeid, :])
-    m = rand(d)
-    if m != nodeid
-        move_agent!(agent, m, model)
+    #add city selection
+    if rand()<0.01
+        move_agent!(agent, model)
     end
 end
 
