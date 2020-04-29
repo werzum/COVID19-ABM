@@ -54,7 +54,6 @@ function getDensityData()
     rawdata
 end
 
-
 function generateDensity(rawdata, target = 80000000, seed = 0)
     Random.seed!(seed)
     xmin = minimum(rawdata.x)
@@ -85,7 +84,7 @@ sum(fullmap)
 gr()
 heatmap(fullmap)
 
-function model_initiation(beta_undet, beta_det, densitymap, infection_period = 8, reinfection_probability = 0.02,
+function model_initiation(;beta_undet, beta_det, densitymap, infection_period = 8, reinfection_probability = 0.02,
     detection_time = 14, death_rate = 0.02, seed=0)#Is infected per city, starts with 1 infected
 
     Random.seed!(seed)
@@ -114,7 +113,7 @@ function model_initiation(beta_undet, beta_det, densitymap, infection_period = 8
     for x in 400:410, y in 100:110
         inds = get_node_contents((x,y), model)
         for n in inds
-            if rand()<0.01
+            if rand()<0.1
                 agent = id2agent(n, model)
                 agent.status = :I
                 agent.days_infected = 1
@@ -126,15 +125,14 @@ function model_initiation(beta_undet, beta_det, densitymap, infection_period = 8
 end
 
 params = Dict(
-:beta_det=> 0.1,
-:beta_undet=> 0.2,
+:beta_det=> 1,
+:beta_undet=> 3,
 :infection_period=> 10,
 :reinfection_probability=> 0.01,
 :detection_time=> 6,
 :death_rate=> 0.02)
 
-model = model_initiation(densitymap = fullmap; params...)#... is "splat" operator, passing all contents as argmuents
-
+#=
 #old plotting method
 plotargs = (node_size	= 0.2, method = :circular, linealpha = 0.4)
 plotabm(model; plotargs...)
@@ -156,6 +154,7 @@ plotabm(model; plotargs...)
 #color node with ratio of infected
 infected_fraction(x) = cgrad(:inferno)[count(a.status == :I for a in x)/length(x)]
 plotabm(model, infected_fraction; plotargs...)
+=#
 
 function agent_step!(agent, model)
     migrate!(agent, model)
@@ -165,36 +164,58 @@ function agent_step!(agent, model)
 end
 
 function migrate!(agent, model)
-    #add city selection
-    if rand()<0.01
-        move_agent!(agent, model)
+    #if he wants to move
+    if rand()<0.005
+        #get random coordinates
+        dims = model.space.dimensions
+        randx = rand(1:1:dims[1])
+        randy = rand(1:1:dims[2])
+        while length(get_node_contents((randx,randy), model))==0
+            randx = rand(1:1:dims[1])
+            randy = rand(1:1:dims[2])
+        end
+        #and move the agent to a none-empty place
+        if length(get_node_contents((randx,randy), model))>1
+            move_agent!(agent,(randx,randy), model)
+        end
     end
 end
 
 function transmit!(agent, model)
+    #cant transmit if healthy/recovered
     agent.status == :S && return
     agent.status == :R && return
     prop = model.properties
 
     #set the detected/undetected infection rate, also check if he doesnt show symptoms
     rate = if agent.days_infected >= prop[:detection_time] && rand()<=0.8
-            prop[:beta_det][agent.pos]
+            prop[:beta_det]
     else
-        prop[:beta_undet][agent.pos]
+        prop[:beta_undet]
     end
 
     d = Poisson(rate)
-    n = rand(d) #determine number of people to infect, based on the rate?
+    n = rand(d) #determine number of people to infect, based on the rate
     n == 0 && return #skip if probability of infection =0
-
+    timeout = n*2
+    t = 0
     #infect the number of contacts and then return
-    for contactID in get_node_contents(agent, model)
-        contact = id2agent(contactID, model)
-        if contact.status == :S || (contact.status == :R && rand() <= prop[:reinfection_probability])
-            contact.status = :I
-            n -= 1
-            n == 0 && return
+    #node_contents = get_node_contents(agent, model)
+    neighbors = node_neighbors(agent, model)
+
+    #trying to infect n others from random neighbor node, timeout if in a node without
+    while n > 0 && t < timeout
+        node = rand(neighbors)
+        contents = get_node_contents(node, model)
+        if length(contents)>1
+            infected = id2agent(rand(contents), model)
+            if infected.status == :S || (infected.status == :R && rand() <= prop[:reinfection_probability])
+                infected.status = :I
+                n -= 1
+                print("Infected someone with rate $(n)")
+            end
         end
+        t +=1
     end
 end
 
@@ -210,30 +231,27 @@ function recover_or_die!(agent, model)
         end
     end
 end
-
-model = model_initiation(;params...)
-
+#=
 #generate a gif for the model steps
 anim = @animate for i = 1:30
     step!(model, agent_step!, 1)
     pl = plotabm(model, infected_fraction; plotargs...)
     title!(pl, "Day $(i)")
 end
-
 gif(anim, "covid_evo.gif", fps = 3);
-
 model
+=#
 
 #make chart and show data
 infected(x) = count(i == :I for i in x)
 recovered(x) = count(i == :R for i in x)
 susceptible(x) = count(i == :S for i in x)
 
-model = model_initiation(;params...)
+model = model_initiation(densitymap = fullmap; params...)
 data_to_collect = Dict(:status => [infected, recovered, susceptible, length])
 data = step!(model, agent_step!, 100, data_to_collect)
 
-N = sum(model.properties[:Ns]) # Total initial population
+N = sum(fullmap) # Total initial population
 x = data.step
 p = Plots.plot(x, log10.(data[:, Symbol("infected(status)")]), label = "infected")
 plot!(p, x, log10.(data[:, Symbol("recovered(status)")]), label = "recovered")
