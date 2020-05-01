@@ -212,7 +212,6 @@ function transmit!(agent, model)
             if infected.status == :S || (infected.status == :R && rand() <= prop[:reinfection_probability])
                 infected.status = :I
                 n -= 1
-                print("Infected someone with rate $(n)")
             end
         end
         t +=1
@@ -231,26 +230,17 @@ function recover_or_die!(agent, model)
         end
     end
 end
-#=
-#generate a gif for the model steps
-anim = @animate for i = 1:30
-    step!(model, agent_step!, 1)
-    pl = plotabm(model, infected_fraction; plotargs...)
-    title!(pl, "Day $(i)")
-end
-gif(anim, "covid_evo.gif", fps = 3);
-model
-=#
 
-#make chart and show data
+
+model = model_initiation(densitymap = fullmap; params...)
+
+#Plot of overall SIR count
+
 infected(x) = count(i == :I for i in x)
 recovered(x) = count(i == :R for i in x)
 susceptible(x) = count(i == :S for i in x)
-
-model = model_initiation(densitymap = fullmap; params...)
 data_to_collect = Dict(:status => [infected, recovered, susceptible, length])
 data = step!(model, agent_step!, 100, data_to_collect)
-
 N = sum(fullmap) # Total initial population
 x = data.step
 p = Plots.plot(x, log10.(data[:, Symbol("infected(status)")]), label = "infected")
@@ -261,3 +251,13 @@ plot!(p, x, dead, label = "dead")
 xlabel!(p, "steps")
 ylabel!(p, "log( count )")
 p
+
+#Animation of spatial spread
+properties = [:status, :pos]
+#plot the ith step of the simulation
+anim = @animate for i ∈ 1:50
+    data = step!(model, agent_step!, 1, properties)
+    p = plot2D(data, :status, nodesize=3)
+    title!(p, "Day $(i)")
+end
+gif(anim, "covid_evolution.gif", fps = 3);
