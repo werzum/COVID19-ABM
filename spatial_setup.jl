@@ -17,10 +17,9 @@ function translateDensity(x::Int, seed = 0)
     return 0
 end
 
-
 function getDensityData()
 
-    rawdata = CSV.read("census.csv")
+    rawdata = CSV.read("SourceData\\census.csv")
     #names(rawdata)
 
     rawdata.x = (rawdata.x_mp_1km .- 500) ./ 1000
@@ -37,7 +36,7 @@ function getDensityData()
     rawdata.x = rawdata.x .- xmin .+1
     rawdata.y = rawdata.y .- ymin .+1
 
-    rawdata
+    return rawdata
 end
 
 function generateDensity(rawdata, target = 80000000, seed = 0)
@@ -49,9 +48,11 @@ function generateDensity(rawdata, target = 80000000, seed = 0)
     ymin = minimum(rawdata.y)
     ymax = maximum(rawdata.y)
     ysize = Int(ymax - ymin) + 1
+
     # empty map
     densitymap = zeros(Int64, xsize, ysize)
     println("$(nrow(rawdata)) sets of data.")
+
     for i in 1:nrow(rawdata)
         value = rawdata[i,:Einwohner]
         x = Int(rawdata.x[i])
@@ -61,8 +62,7 @@ function generateDensity(rawdata, target = 80000000, seed = 0)
 
     correctionfactor = target / sum(densitymap)
     densitymap = (x->Int.(round(x))).(densitymap' .* correctionfactor)
-
+    return densitymap
 end
-
 
 export getDensityData, generateDensity

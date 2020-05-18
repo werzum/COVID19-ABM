@@ -10,7 +10,7 @@ using Images
 
 include("spatial_setup.jl") #exports getDensityData,generateDensity
 include("agent_functions.jl") #exports agent_step
-include("visualization.jl") #exports create_graph,create_gif
+include("visualization.jl") #exports create_graph,create_gif, create_data
 include("model_initiation.jl") #exports model_initiation
 
 #generating the Map
@@ -39,8 +39,8 @@ params = Dict(
 #initialize the model
 model = model_initiation(densitymap = fullmap; params...)
 #Plot of overall SIR count
-create_gif()
+@time create_graph()
 #or make a GIF with 50 steps
-create_gif()
+#create_gif()
 
 end

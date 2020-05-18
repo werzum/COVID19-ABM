@@ -1,9 +1,14 @@
-function create_graph()
+function create_data(model, steps)
     infected(x) = count(i == :I for i in x)
     recovered(x) = count(i == :R for i in x)
     susceptible(x) = count(i == :S for i in x)
     data_to_collect = Dict(:status => [infected, recovered, susceptible, length])
-    data = step!(model, agent_step!, 100, data_to_collect)
+    data = step!(model, agent_step!, steps, data_to_collect)
+    return data
+end
+
+function create_graph()
+    data = create_data(model,100)
     N = sum(fullmap) # Total initial population
     x = data.step
     p = Plots.plot(x, log10.(data[:, Symbol("infected(status)")]), label = "infected")
@@ -27,4 +32,4 @@ function create_gif()
     gif(anim, "covid_evolution.gif", fps = 3);
 end
 
-export create_graph, create_gif
+export create_graph, create_gif, create_data
