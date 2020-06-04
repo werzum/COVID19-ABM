@@ -29,7 +29,7 @@ function create_gif()
         p = plot2D(data, :status, nodesize=3)
         title!(p, "Day $(i)")
     end
-    gif(anim, "covid_evolution.gif", fps = 3);
+    gif(anim, "Graphics\\covid_evolution.gif", fps = 3);
 end
 
 export create_graph, create_gif, create_data
