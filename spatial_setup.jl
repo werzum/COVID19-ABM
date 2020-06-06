@@ -19,8 +19,8 @@ end
 
 function getDensityData()
 
-    rawdata = CSV.read("SourceData\\census.csv")
-    #names(rawdata)
+    rawdata1 = CSV.read("SourceData\\census_updated.csv")
+    rawdata = CSV.read("SourceData\\zensus3.csv")
 
     rawdata.x = (rawdata.x_mp_1km .- 500) ./ 1000
     rawdata.y = (rawdata.y_mp_1km .- 500) ./ 1000
@@ -35,9 +35,9 @@ function getDensityData()
 
     rawdata.x = rawdata.x .- xmin .+1
     rawdata.y = rawdata.y .- ymin .+1
+end
 
     return rawdata
-end
 
 function generateDensity(rawdata, target = 80000000, seed = 0)
     Random.seed!(seed)
