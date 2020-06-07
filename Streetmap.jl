@@ -4,36 +4,64 @@ using OpenStreetMapXPlot
 using LightGraphs
 using AgentsPlots
 using GraphPlot
+using CSV
+using DataFrames
 
-#get map data and intersections
-aachen_map = get_map_data("SourceData\\map.osm", use_cache=false, only_intersections=true)
-aachen_graph = aachen_map.g
+function create_node_map()
+    #get map data and intersections
+    aachen_map = get_map_data("SourceData\\map.osm", use_cache=false, only_intersections=true)
+    aachen_graph = aachen_map.g
 
-#lat long of Aachen as reference frame
-LLA_ref = LLA(50.77664, 6.08342, 0.0)
-LLA_ref.lat
-#conversion to lat long coordinates
-LLA_Dict = OpenStreetMapX.LLA(aachen_map.nodes, LLA_ref)
-#filter the LLA_Dict so we have only the nodes we have in the graph
-LLA_Dict = filter(key -> haskey(aachen_map.v, key.first), LLA_Dict)
+    #lat long of Aachen as reference frame
+    LLA_ref = LLA(50.77664, 6.08342, 0.0)
+    LLA_ref.lat
+    #conversion to lat long coordinates
+    LLA_Dict = OpenStreetMapX.LLA(aachen_map.nodes, LLA_ref)
+    #filter the LLA_Dict so we have only the nodes we have in the graph
+    LLA_Dict = filter(key -> haskey(aachen_map.v, key.first), LLA_Dict)
 
-#sort the LLA_dict_values as in aachen_map.v so the graph has the right ordering of the nodes
-LLA_Dict_values = Vector{LLA}(undef,length(LLA_Dict))
-for (key,value) in aachen_map.v
-    LLA_Dict_values[value] = LLA_Dict[key]
+    #sort the LLA_dict_values as in aachen_map.v so the graph has the right ordering of the nodes
+    LLA_Dict_values = Vector{LLA}(undef,length(LLA_Dict))
+    for (key,value) in aachen_map.v
+        LLA_Dict_values[value] = LLA_Dict[key]
+    end
+
+    #and parse the lats longs into separate vectors
+    LLA_Dict_lats = zeros(Float64,0)
+    LLA_Dict_longs = zeros(Float64,0)
+    for (value) in LLA_Dict_values
+        append!(LLA_Dict_lats, value.lat)
+        append!(LLA_Dict_longs, value.lon)
+    end
+
+    aachen_graph = SimpleGraph(aachen_graph)
+    aachen_graph = aachen_graph,LLA_Dict_lats,LLA_Dict_longs
+    return aachen_graph
 end
 
-#and parse the lats longs into separate vectors
-LLA_Dict_lats = zeros(Float64,0)
-LLA_Dict_longs = zeros(Float64,0)
-for (value) in LLA_Dict_values
-    append!(LLA_Dict_lats, value.lat)
-    append!(LLA_Dict_longs, value.lon)
+function create_demography_map()
+    #read the data
+    rawdata = CSV.read("SourceData\\zensus3.csv")
+    #drop irrelevant columns and redundant rows
+    deletecols!(rawdata,3:14)
+    colsymbols = propertynames(rawdata)
+    rename!(rawdata,colsymbols)
+    rawdata = rawdata[rawdata[:distance].!=0,:]
 end
 
-aachen_graph = SimpleGraph(aachen_graph)
+function fill_map(graph,demography_map)
+
+
+
 gplot(aachen_graph, LLA_Dict_lats, LLA_Dict_longs)
 
+using Shapefile
+table = Shapefile.Table("SourceData\\Zensus_Atlas_Deutschland-shp\\Zensus_spitze_Werte_1km_v2.shp")
+using DataFrames
+df = DataFrame(table)
+print(first(df,7))
+
+GDAL.
 using Agents, AgentsPlots
 
 mutable struct SchellingAgents <: AbstractAgent
