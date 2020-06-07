@@ -1,11 +1,7 @@
-using OpenStreetMapX
-using Plots
-using OpenStreetMapXPlot
-using LightGraphs
-using AgentsPlots
-using GraphPlot
-using CSV
-using DataFrames
+using OpenStreetMapX, LightGraphs, GraphPlot
+using CSV, DataFrames
+using Agents, AgentsPlots
+using Statistics
 
 function create_node_map()
     #get map data and intersections
@@ -14,7 +10,6 @@ function create_node_map()
 
     #lat long of Aachen as reference frame
     LLA_ref = LLA(50.77664, 6.08342, 0.0)
-    LLA_ref.lat
     #conversion to lat long coordinates
     LLA_Dict = OpenStreetMapX.LLA(aachen_map.nodes, LLA_ref)
     #filter the LLA_Dict so we have only the nodes we have in the graph
@@ -36,6 +31,9 @@ function create_node_map()
 
     aachen_graph = SimpleGraph(aachen_graph)
     aachen_graph = aachen_graph,LLA_Dict_lats,LLA_Dict_longs
+
+    #show the map to prove how cool and orderly it is
+    #gplot(aachen_graph, LLA_Dict_lats, LLA_Dict_longs)
     return aachen_graph
 end
 
@@ -46,23 +44,51 @@ function create_demography_map()
     deletecols!(rawdata,3:14)
     colsymbols = propertynames(rawdata)
     rename!(rawdata,colsymbols)
-    rawdata = rawdata[rawdata[:distance].!=0,:]
+    rawdata = rawdata[rawdata.distance.!=0,:]
+    return rawdata
 end
 
-function fill_map(graph,demography_map)
+function fill_map()
+    #create the nodemap and rawdata demography map and set the bounds for it
+    nodes,lat,long=create_node_map()
+    topleft = (maximum(lat),minimum(long))
+    bottomright = (minimum(lat),maximum(long))
+    rawdata = create_demography_map()
+
+    #get the grid data from the boundaries of the node
+    working_grid = rawdata[(rawdata.X .> topleft[2]) .& (rawdata.X .< bottomright[2]) .& (rawdata.Y .< topleft[1]) .& (rawdata.Y .> bottomright[1]),:]
+    working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k)
+
+    #divide the population by this to avoid computating me to death
+    correction_factor = 1000
+
+    #set up the variables and iterate over the groups to fill the node map
+    inhabitants = women = age = below18 = over65 = 0
+    agents = Array{AbstractAgent}
+    for group in working_grid
+        einwohner = round(mean(group.Einwohner)/correction_factor)
+        for
+        agent = SchellingAgents
+        women =
+        print("einwohner:",einwohner)
+    end
+
+end
+
+function create_abm()
+
+    space = GraphSpace(nodes)
+    model = ABM(SchellingAgents,space)
+
+    for x in 1:100
+        agent = SchellingAgents(x+200, x, false, 1)
+        add_agent!(agent, model)
+    end
+
+    plotargs = (node_size = 0.001, method = :spring, linealpha = 0.1)
 
 
 
-gplot(aachen_graph, LLA_Dict_lats, LLA_Dict_longs)
-
-using Shapefile
-table = Shapefile.Table("SourceData\\Zensus_Atlas_Deutschland-shp\\Zensus_spitze_Werte_1km_v2.shp")
-using DataFrames
-df = DataFrame(table)
-print(first(df,7))
-
-GDAL.
-using Agents, AgentsPlots
 
 mutable struct SchellingAgents <: AbstractAgent
     id::Int # The identifier number of the agent
@@ -71,15 +97,13 @@ mutable struct SchellingAgents <: AbstractAgent
     group::Int # The group of the agent,  determines mood as it interacts with neighbors
 end
 
-space = GraphSpace(aachen_map.g)
-model = ABM(SchellingAgents,space)
-
-for x in 1:100
-    agent = SchellingAgents(x+200, x, false, 1)
-    add_agent!(agent, model)
+mutable struct DemoAgent <: AbstractAgent
+    id::Int64 # The identifier number of the agent
+    pos::Int32 # The nodenumber
+    women::Bool
+    age::Int8
 end
 
-plotargs = (node_size = 0.001, method = :spring, linealpha = 0.1)
 
 agent_number(x) = cgrad(:inferno)[length(x)]
 agent_size(x) = length(x)/10
