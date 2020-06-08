@@ -38,32 +38,35 @@ function create_node_map()
 end
 
 function create_demography_map()
+    #wrote changes to csv so we dont have to do basic cleaning again and again
     #read the data
-    rawdata = CSV.read("SourceData\\zensus3.csv")
+    #rawdata = CSV.read("SourceData\\zensus3.csv")
     #drop irrelevant columns and redundant rows
-    select!(rawdata,Not(3:14))
+    #select!(rawdata,Not(16))
+    #rawdata = rawdata[rawdata.Einwohner.!=-1,:]
+    #CSV.write("SourceData\\zensus.csv",rawdata)
+
+    rawdata = CSV.read("SourceData\\zensus.csv")
+    #make sure properties are symbols
     colsymbols = propertynames(rawdata)
     rename!(rawdata,colsymbols)
-    rawdata = rawdata[rawdata.distance.!=0,:]
+    #@time plot(rawdata.X,rawdata.Y)
     return rawdata
 end
 
-function get_amount(inhabitants,input)
-    return round(mean((inhabitants*input)/100))
-end
-
-isbetween(a, x, b) = a <= x <= b || b <= x <= a
-
 function fill_map(model)
+    #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
+    #TODO pass coordinates to agent space for good visualization later
+    #TODO optimize for loop so we dont use those weird nested for loops
+    
     #create the nodemap and rawdata demography map and set the bounds for it
-    @time nodes,lat,long=create_node_map()
+    nodes,lat,long=create_node_map()
     topleft = (maximum(lat),minimum(long))
     bottomright = (minimum(lat),maximum(long))
-    @time rawdata = create_demography_map()
+    rawdata = create_demography_map()
 
     #get the grid data within the boundaries of the node map
     working_grid = rawdata[(rawdata.X .> topleft[2]) .& (rawdata.X .< bottomright[2]) .& (rawdata.Y .< topleft[1]) .& (rawdata.Y .> bottomright[1]),:]
-    #TODO improve this so we also get edge cases, leads to some empty grid cells
     working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=true)
 
     #divide the population by this to avoid computing me to death
@@ -72,11 +75,6 @@ function fill_map(model)
 
     #set up the variables and iterate over the groups to fill the node map
     inhabitants = women = age = below18 = over65 = 0
-    agent_struct = Vector{DemoAgent}
-
-    agent_tuple = [(Bool, 0)]
-    agent_properties = []
-    testfact = 50
 
     mutable struct agent_tuple
         women::Bool
@@ -85,7 +83,7 @@ function fill_map(model)
 
     DemoAgent(id;women,age) = DemoAgent(id,women,age)
     space = GraphSpace(nodes)
-    #model = ABM(DemoAgent,space)
+    model = ABM(DemoAgent,space)
 
     for group in working_grid
 
@@ -95,9 +93,10 @@ function fill_map(model)
         left = minimum(group[:X])
         right = maximum(group[:X])
         top-bottom == 0 && right-left == 0 && continue
+        print(group)
 
         #get the number of inhabitants, women, old people etc for the current grid
-        inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/100)))
+        inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
         women = get_amount(inhabitants,group.Frauen_A)
         age = Int(round(mean(group.Alter_D)))
         below18 = get_amount(inhabitants,group.unter18_A)
@@ -131,16 +130,24 @@ function fill_map(model)
     end
 
     return model
-    plotargs = (node_size = 0.001, method = :spring, linealpha = 0.1)
-    agent_number(x) = cgrad(:inferno)[length(x)]
-    agent_size(x) = length(x)/10
-    @time plotabm(model; ac = agent_number, as=agent_size, plotargs...)
+    #plot to test if model is properly initialized, seems okay
+    #plotargs = (node_size = 0.001, method = :spring, linealpha = 0.1)
+    #agent_number(x) = cgrad(:inferno)[length(x)]
+    #agent_size(x) = length(x)/10
+    #@time plotabm(model; ac = agent_number, as=agent_size, plotargs...)
 
 end
 
+#helper functions
+function get_amount(inhabitants,input)
+    return round(mean((inhabitants*input)/100))
+end
+
+isbetween(a, x, b) = a <= x <= b || b <= x <= a
+
 mutable struct DemoAgent <: AbstractAgent
-    id::Int # The identifier number of the agent
-    pos::Int # The nodenumber
+    id::Int
+    pos::Int
     women::Bool
     age::Int8
 end
