@@ -54,7 +54,7 @@ end
 
 isbetween(a, x, b) = a <= x <= b || b <= x <= a
 
-function fill_map()
+function fill_map(model)
     #create the nodemap and rawdata demography map and set the bounds for it
     @time nodes,lat,long=create_node_map()
     topleft = (maximum(lat),minimum(long))
@@ -78,13 +78,14 @@ function fill_map()
     agent_properties = []
     testfact = 50
 
-    mutable struct agent_tuple1
+    mutable struct agent_tuple
         women::Bool
         age::Int16
     end
 
+    DemoAgent(id;women,age) = DemoAgent(id,women,age)
     space = GraphSpace(nodes)
-    model = ABM(DemoAgent,space)
+    #model = ABM(DemoAgent,space)
 
     for group in working_grid
 
@@ -96,7 +97,7 @@ function fill_map()
         top-bottom == 0 && right-left == 0 && continue
 
         #get the number of inhabitants, women, old people etc for the current grid
-        inhabitants = Int(round(mean(group.Einwohner)/correction_factor))
+        inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/100)))
         women = get_amount(inhabitants,group.Frauen_A)
         age = Int(round(mean(group.Alter_D)))
         below18 = get_amount(inhabitants,group.unter18_A)
@@ -106,9 +107,7 @@ function fill_map()
         possible_nodes_long = findall(y -> isbetween(left,y,right), long)
         possible_nodes_lat = findall(x -> isbetween(bottom, x, top), lat)
         #get index of nodes to create a base of nodes we can later add our agents to
-        possible_modes =
-        #print(intersect(possible_nodes_lat,possible_nodes_long))
-
+        possible_nodes = (intersect(possible_nodes_lat,possible_nodes_long))
 
         #fill array with default agents of respective amount of agents with young/old age and gender
         agent_properties = Vector{agent_tuple1}(undef,inhabitants)
@@ -125,24 +124,19 @@ function fill_map()
             temp_arr = findall(x -> x.age == age, agent_properties)
             agent_properties[rand(temp_arr)].age = rand(66:100)
         end
-        #for agent in agent_properties
-        #    add_agent!(agent,model,)
+
+        for agent in agent_properties
+            add_agent!(rand(possible_nodes), model, agent.women, agent.age)
+        end
     end
+
+    return model
+    plotargs = (node_size = 0.001, method = :spring, linealpha = 0.1)
+    agent_number(x) = cgrad(:inferno)[length(x)]
+    agent_size(x) = length(x)/10
+    @time plotabm(model; ac = agent_number, as=agent_size, plotargs...)
 
 end
-
-function create_abm()
-
-    space = GraphSpace(nodes)
-    model = ABM(SchellingAgents,space)
-
-    for x in 1:100
-        agent = SchellingAgents(x+200, x, false, 1)
-        add_agent!(agent, model)
-    end
-
-    plotargs = (node_size = 0.001, method = :spring, linealpha = 0.1)
-
 
 mutable struct DemoAgent <: AbstractAgent
     id::Int # The identifier number of the agent
@@ -150,9 +144,3 @@ mutable struct DemoAgent <: AbstractAgent
     women::Bool
     age::Int8
 end
-
-
-agent_number(x) = cgrad(:inferno)[length(x)]
-agent_size(x) = length(x)/10
-
-plotabm(model; ac = agent_number, as=agent_size, plotargs...)
