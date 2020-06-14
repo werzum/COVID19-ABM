@@ -1,4 +1,4 @@
-using OpenStreetMapX, LightGraphs, GraphPlot
+using OpenStreetMapX, LightGraphs, GraphPlot, GraphRecipes
 using CSV, DataFrames
 using Agents, AgentsPlots
 using Statistics
@@ -30,10 +30,13 @@ function create_node_map()
     end
 
     aachen_graph = SimpleGraph(aachen_graph)
-    aachen_graph = aachen_graph,LLA_Dict_lats,LLA_Dict_longs
-
+    #graphplot(aachen_graph, markersize=2, x=LLA_Dict_longs, y=LLA_Dict_lats)
     #show the map to prove how cool and orderly it is
-    #gplot(aachen_graph, LLA_Dict_lats, LLA_Dict_longs)
+    #gplot(aachen_graph, LLA_Dict_longs, LLA_Dict_lats)
+
+    #savegraph("Graphics\\aachen_graph.lgz", aachen_graph)
+    aachen_graph = aachen_graph, LLA_Dict_longs, LLA_Dict_lats
+
     return aachen_graph
 end
 
@@ -50,7 +53,7 @@ function create_demography_map()
     #make sure properties are symbols
     colsymbols = propertynames(rawdata)
     rename!(rawdata,colsymbols)
-    #@time plot(rawdata.X,rawdata.Y)
+    @time plot(rawdata.X,rawdata.Y)
     return rawdata
 end
 
@@ -58,9 +61,9 @@ function fill_map(model)
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
     #TODO pass coordinates to agent space for good visualization later
     #TODO optimize for loop so we dont use those weird nested for loops
-    
+
     #create the nodemap and rawdata demography map and set the bounds for it
-    nodes,lat,long=create_node_map()
+    nodes,long,lat=create_node_map()
     topleft = (maximum(lat),minimum(long))
     bottomright = (minimum(lat),maximum(long))
     rawdata = create_demography_map()
@@ -75,11 +78,6 @@ function fill_map(model)
 
     #set up the variables and iterate over the groups to fill the node map
     inhabitants = women = age = below18 = over65 = 0
-
-    mutable struct agent_tuple
-        women::Bool
-        age::Int16
-    end
 
     DemoAgent(id;women,age) = DemoAgent(id,women,age)
     space = GraphSpace(nodes)
@@ -109,9 +107,9 @@ function fill_map(model)
         possible_nodes = (intersect(possible_nodes_lat,possible_nodes_long))
 
         #fill array with default agents of respective amount of agents with young/old age and gender
-        agent_properties = Vector{agent_tuple1}(undef,inhabitants)
+        agent_properties = Vector{agent_tuple}(undef,inhabitants)
         for x in 1:inhabitants
-            agent_properties[Int(x)] = agent_tuple1(false,age)
+            agent_properties[Int(x)] = agent_tuple(false,age)
         end
         for w in women
             agent_properties[rand(1:inhabitants)].women = true
@@ -131,10 +129,12 @@ function fill_map(model)
 
     return model
     #plot to test if model is properly initialized, seems okay
-    #plotargs = (node_size = 0.001, method = :spring, linealpha = 0.1)
-    #agent_number(x) = cgrad(:inferno)[length(x)]
-    #agent_size(x) = length(x)/10
-    #@time plotabm(model; ac = agent_number, as=agent_size, plotargs...)
+    plotargs = (linealpha = 0.4, x=long, y=lat, nodesize=0.001)
+    agent_number(x) = cgrad(:inferno)[length(x)]
+    agent_size(x) = length(x)
+    model.space.
+    graphplot(model.space.graph, markersize=2, x=long, y=lat, linealpha = 0.9)
+    @time plotabm(model; ac = agent_number, as=agent_size, plotargs...)
 
 end
 
@@ -150,4 +150,10 @@ mutable struct DemoAgent <: AbstractAgent
     pos::Int
     women::Bool
     age::Int8
+end
+
+
+mutable struct agent_tuple
+    women::Bool
+    age::Int16
 end
