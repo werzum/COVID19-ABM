@@ -2,6 +2,7 @@ using OpenStreetMapX, LightGraphs, GraphPlot, GraphRecipes
 using CSV, DataFrames
 using Agents, AgentsPlots
 using Statistics
+using Distributed
 
 function create_node_map()
     #get map data and intersections
@@ -51,21 +52,29 @@ function create_demography_map()
     #CSV.write("SourceData\\zensus.csv",rawdata)
 
     rawdata = CSV.read("SourceData\\zensus.csv")
+    #povertydata
+    povertydata = CSV.read("SourceData\\Income_Regions.csv")
     #make sure properties are symbols
     colsymbols = propertynames(rawdata)
     rename!(rawdata,colsymbols)
+
     #@time plot(rawdata.X,rawdata.Y)
     return rawdata
 end
 
+function
+
 function fill_map(model)
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
-    #TODO pass coordinates to agent space for good visualization later
     #TODO optimize for loop so we dont use those weird nested for loops
 
     #create the nodemap and rawdata demography map and set the bounds for it
-    nodes,long,lat,bounds = create_node_map()
-    rawdata = create_demography_map()
+
+    r1 = @spawn create_node_map()
+    r2 = @spawn create_demography_map()
+
+    nodes,long,lat,bounds = fetch(r1)
+    rawdata = fetch(r2)
 
     #get the grid data within the boundaries of the node map
     working_grid = rawdata[(rawdata.X .> bounds.min_x) .& (rawdata.X .< bounds.max_x) .& (rawdata.Y .> bounds.min_y).& (rawdata.Y .< bounds.max_y),:]
@@ -131,12 +140,17 @@ function fill_map(model)
 
     N = Agents.nodes(model)
     ncolor = Vector(undef, length(N))
+    nodesizevec = Vector(undef, length(N))
+
+    #color and size the nodes according to the population
+    #could set size to population and color to other attributes (sickness, belief,...)
     for (i, n) in enumerate(N)
         a = get_node_agents(n, model)
+        #set color for empty nodes and populated nodes
         length(a)==0 ? ncolor[i]=cgrad(:inferno)[1] : ncolor[i]=cgrad(:inferno)[256/length(a)]
-        #ncolor[i] = cgrad(:inferno)[length(a)]
+        length(a)==0 ? nodesizevec[i] = 1 : nodesizevec[i] = 3
     end
-    gplot(aachen_graph, LLA_Dict_longs, LLA_Dict_lats, nodefillc=ncolor, edgestrokec=cgrad(:inferno)[100])
+    gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec, edgestrokec=cgrad(:inferno)[100])
 
 end
 
@@ -144,8 +158,6 @@ end
 function get_amount(inhabitants,input)
     return round((inhabitants*(mean(input)/100)))
 end
-
-get_amount(500,50)
 
 isbetween(a, x, b) = a <= x <= b || b <= x <= a
 
