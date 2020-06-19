@@ -3,6 +3,7 @@ using CSV, DataFrames
 using Agents, AgentsPlots
 using Statistics
 using Distributed
+using GeometricalPredicates
 
 function create_node_map()
     #get map data and intersections
@@ -53,7 +54,38 @@ function create_demography_map()
 
     rawdata = CSV.read("SourceData\\zensus.csv")
     #povertydata
+    rawdata.kaufkraft = zeros
+    iterator = eachrow(rawdata)
+    for row in iterator
+        row.point = Point(row.X, row.Y)
+    end
+    
     povertydata = CSV.read("SourceData\\Income_Regions.csv")
+    povertydata = select!(povertydata,:relative_kaufkraftarmut,:MultiPolygon)
+    #replace.(povertydata.:MultiPolygon, r"[\\]" => "")
+    iterator = eachrow(povertydata)
+    for row in iterator
+        array = split(row.:MultiPolygon,",")
+        longs = array[1:2:end]
+        lats = array[2:2:end]
+        deleteat!(longs, (length(longs)-5):length(longs))
+        deleteat!(lats, (length(lats)-5):length(lats))
+        pointarray = Vector(undef,length(longs))
+        arraysize = 0
+        length(longs)<=length(lats) ? arraysize = length(longs) : arraysize = length(lats)
+        for i in 1:arraysize
+            point = Point(parse(Float64,longs[i]),parse(Float64,lats[i]))
+            pointarray[i]=point
+        end
+        deleteat!(pointarray, (length(pointarray)-1):length(pointarray))
+        #print(pointarray)
+        #deleteat!(pointarray, findall(x->!isa(x,Point2D), pointarray))
+        polygon = Polygon(pointarray...)
+        tempdf = findall(in(rawdata.))
+
+
+    end
+
     #make sure properties are symbols
     colsymbols = propertynames(rawdata)
     rename!(rawdata,colsymbols)
@@ -62,9 +94,73 @@ function create_demography_map()
     return rawdata
 end
 
-function
+function fill_map(model,group,long, lat, correction_factor)
+    nrow(group) < 2 && return
+    #get the bounds and skip if the cell is empty
+    top = maximum(group[:Y])
+    bottom = minimum(group[:Y])
+    left = minimum(group[:X])
+    right = maximum(group[:X])
+    top-bottom == 0 && right-left == 0 && return
 
-function fill_map(model)
+    possible_nodes_long = findall(y -> isbetween(left,y,right), long)
+    possible_nodes_lat = findall(x -> isbetween(bottom, x, top), lat)
+    #get index of nodes to create a base of nodes we can later add our agents to
+    #and skip if there are no nodes within this space
+    possible_nodes = (intersect(possible_nodes_lat,possible_nodes_long))
+    length(possible_nodes) == 0 && return
+
+    #get the number of inhabitants, women, old people etc for the current grid
+    inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
+    women = get_amount(inhabitants,group.Frauen_A)
+    age = Int(round(mean(group.Alter_D)))
+    below18 = get_amount(inhabitants,group.unter18_A)
+    over65 = get_amount(inhabitants,group.ab65_A)
+    println("We have $(inhabitants) inhabitants with $(women) women, $(age) mean age and $(over65) old people \n")
+
+    #fill array with default agents of respective amount of agents with young/old age and gender
+    agent_properties = Vector{agent_tuple}(undef,inhabitants)
+    for x in 1:inhabitants
+        agent_properties[Int(x)] = agent_tuple(false,age)
+    end
+    for w in 1:women
+        agent_properties[rand(1:inhabitants)].women = true
+    end
+    for y in 1:below18
+        agent_properties[rand(1:inhabitants)].age = rand(1:17)
+    end
+    for o in 1:over65
+        temp_arr = findall(x -> x.age == age, agent_properties)
+        agent_properties[rand(temp_arr)].age = rand(66:100)
+    end
+    for agent in agent_properties
+        add_agent!(rand(possible_nodes), model, agent.women, agent.age)
+    end
+    return
+end
+
+
+#helper functions
+function get_amount(inhabitants,input)
+    return round((inhabitants*(mean(input)/100)))
+end
+
+isbetween(a, x, b) = a <= x <= b || b <= x <= a
+
+mutable struct DemoAgent <: AbstractAgent
+    id::Int
+    pos::Int
+    women::Bool
+    age::Int8
+end
+
+
+mutable struct agent_tuple
+    women::Bool
+    age::Int16
+end
+
+function setup(model)
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
     #TODO optimize for loop so we dont use those weird nested for loops
 
@@ -91,49 +187,8 @@ function fill_map(model)
     space = GraphSpace(nodes)
     model = ABM(DemoAgent,space)
 
-    for group in working_grid
-
-        nrow(group) < 2 && continue
-        #get the bounds and skip if the cell is empty
-        top = maximum(group[:Y])
-        bottom = minimum(group[:Y])
-        left = minimum(group[:X])
-        right = maximum(group[:X])
-        top-bottom == 0 && right-left == 0 && continue
-
-        possible_nodes_long = findall(y -> isbetween(left,y,right), long)
-        possible_nodes_lat = findall(x -> isbetween(bottom, x, top), lat)
-        #get index of nodes to create a base of nodes we can later add our agents to
-        #and skip if there are no nodes within this space
-        possible_nodes = (intersect(possible_nodes_lat,possible_nodes_long))
-        length(possible_nodes) == 0 && continue
-
-        #get the number of inhabitants, women, old people etc for the current grid
-        inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
-        women = get_amount(inhabitants,group.Frauen_A)
-        age = Int(round(mean(group.Alter_D)))
-        below18 = get_amount(inhabitants,group.unter18_A)
-        over65 = get_amount(inhabitants,group.ab65_A)
-        #print("We have $(inhabitants) inhabitants with $(women) women, $(age) mean age and $(over65) old people \n")
-
-        #fill array with default agents of respective amount of agents with young/old age and gender
-        agent_properties = Vector{agent_tuple}(undef,inhabitants)
-        for x in 1:inhabitants
-            agent_properties[Int(x)] = agent_tuple(false,age)
-        end
-        for w in 1:women
-            agent_properties[rand(1:inhabitants)].women = true
-        end
-        for y in 1:below18
-            agent_properties[rand(1:inhabitants)].age = rand(1:17)
-        end
-        for o in 1:over65
-            temp_arr = findall(x -> x.age == age, agent_properties)
-            agent_properties[rand(temp_arr)].age = rand(66:100)
-        end
-        for agent in agent_properties
-            add_agent!(rand(possible_nodes), model, agent.women, agent.age)
-        end
+    @time @inbounds for group in working_grid
+        fill_map(model,group,long,lat,correction_factor)
     end
 
     return model
@@ -152,24 +207,4 @@ function fill_map(model)
     end
     gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec, edgestrokec=cgrad(:inferno)[100])
 
-end
-
-#helper functions
-function get_amount(inhabitants,input)
-    return round((inhabitants*(mean(input)/100)))
-end
-
-isbetween(a, x, b) = a <= x <= b || b <= x <= a
-
-mutable struct DemoAgent <: AbstractAgent
-    id::Int
-    pos::Int
-    women::Bool
-    age::Int8
-end
-
-
-mutable struct agent_tuple
-    women::Bool
-    age::Int16
 end
