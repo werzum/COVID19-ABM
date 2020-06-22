@@ -4,6 +4,8 @@ using Agents, AgentsPlots
 using Statistics
 using Distributed
 using GeometricalPredicates
+using DataFramesMeta
+using Luxor
 
 function create_node_map()
     #get map data and intersections
@@ -55,11 +57,15 @@ function create_demography_map()
     rawdata = CSV.read("SourceData\\zensus.csv")
     #povertydata
     rawdata.kaufkraft = zeros
-    iterator = eachrow(rawdata)
-    for row in iterator
-        row.point = Point(row.X, row.Y)
+    subX = rawdata.X
+    subY = rawdata.Y
+    pointArr = rawdata.Point
+    pointarray = Vector(undef,length(subY))
+    for i in 1:length(subY)
+        pointarray[i] = Point(subX[i], subY[i])
     end
-    
+    rawdata.Point= pointarray
+
     povertydata = CSV.read("SourceData\\Income_Regions.csv")
     povertydata = select!(povertydata,:relative_kaufkraftarmut,:MultiPolygon)
     #replace.(povertydata.:MultiPolygon, r"[\\]" => "")
@@ -70,20 +76,29 @@ function create_demography_map()
         lats = array[2:2:end]
         deleteat!(longs, (length(longs)-5):length(longs))
         deleteat!(lats, (length(lats)-5):length(lats))
-        pointarray = Vector(undef,length(longs))
+        pointarray = Array{Luxor.Point,0}
         arraysize = 0
         length(longs)<=length(lats) ? arraysize = length(longs) : arraysize = length(lats)
         for i in 1:arraysize
-            point = Point(parse(Float64,longs[i]),parse(Float64,lats[i]))
-            pointarray[i]=point
+            point = Luxor.Point(parse(Float64,longs[i]),parse(Float64,lats[i]))
+            push!(pointarray,point)
         end
         deleteat!(pointarray, (length(pointarray)-1):length(pointarray))
         #print(pointarray)
         #deleteat!(pointarray, findall(x->!isa(x,Point2D), pointarray))
-        polygon = Polygon(pointarray...)
-        tempdf = findall(in(rawdata.))
+        polygon = Luxor.poly(pointarray)
+        for i in 1:length(pointArr)
+            if Luxor.isinside(pointArr[i],pointarray)
+                rawdata[i,:kaufkraft] = row.relative_kaufkraftarmut
+                println("found point")
+            end
+        end
 
-
+        #print("Point is:",inpolygon(polygon,rawdata[5,:Point]))
+        #@transform(rawdata,income = inpolygon.(polygon,:Point))
+        #tempdf = findall(x -> inpolygon(polygon,x),rawdata.Point)
+        #print(tempdf)
+        #print("completed iteration")
     end
 
     #make sure properties are symbols
