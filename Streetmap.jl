@@ -3,7 +3,7 @@ using CSV, DataFrames
 using Agents, AgentsPlots
 using Statistics
 using Distributed
-using GeometricalPredicates
+#using GeometricalPredicates
 using DataFramesMeta
 using Luxor
 
@@ -46,60 +46,8 @@ function create_node_map()
 end
 
 function create_demography_map()
-    #wrote changes to csv so we dont have to do basic cleaning again and again
-    #read the data
-    #rawdata = CSV.read("SourceData\\zensus3.csv")
-    #drop irrelevant columns and redundant rows
-    #select!(rawdata,Not(16))
-    #rawdata = rawdata[rawdata.Einwohner.!=-1,:]
-    #CSV.write("SourceData\\zensus.csv",rawdata)
 
     rawdata = CSV.read("SourceData\\zensus.csv")
-    #povertydata
-    rawdata.kaufkraft = zeros
-    subX = rawdata.X
-    subY = rawdata.Y
-    pointArr = rawdata.Point
-    pointarray = Vector(undef,length(subY))
-    for i in 1:length(subY)
-        pointarray[i] = Point(subX[i], subY[i])
-    end
-    rawdata.Point= pointarray
-
-    povertydata = CSV.read("SourceData\\Income_Regions.csv")
-    povertydata = select!(povertydata,:relative_kaufkraftarmut,:MultiPolygon)
-    #replace.(povertydata.:MultiPolygon, r"[\\]" => "")
-    iterator = eachrow(povertydata)
-    for row in iterator
-        array = split(row.:MultiPolygon,",")
-        longs = array[1:2:end]
-        lats = array[2:2:end]
-        deleteat!(longs, (length(longs)-5):length(longs))
-        deleteat!(lats, (length(lats)-5):length(lats))
-        pointarray = Array{Luxor.Point,0}
-        arraysize = 0
-        length(longs)<=length(lats) ? arraysize = length(longs) : arraysize = length(lats)
-        for i in 1:arraysize
-            point = Luxor.Point(parse(Float64,longs[i]),parse(Float64,lats[i]))
-            push!(pointarray,point)
-        end
-        deleteat!(pointarray, (length(pointarray)-1):length(pointarray))
-        #print(pointarray)
-        #deleteat!(pointarray, findall(x->!isa(x,Point2D), pointarray))
-        polygon = Luxor.poly(pointarray)
-        for i in 1:length(pointArr)
-            if Luxor.isinside(pointArr[i],pointarray)
-                rawdata[i,:kaufkraft] = row.relative_kaufkraftarmut
-                println("found point")
-            end
-        end
-
-        #print("Point is:",inpolygon(polygon,rawdata[5,:Point]))
-        #@transform(rawdata,income = inpolygon.(polygon,:Point))
-        #tempdf = findall(x -> inpolygon(polygon,x),rawdata.Point)
-        #print(tempdf)
-        #print("completed iteration")
-    end
 
     #make sure properties are symbols
     colsymbols = propertynames(rawdata)
