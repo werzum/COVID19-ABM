@@ -3,9 +3,10 @@ using CSV, DataFrames
 using Agents, AgentsPlots
 using Statistics
 using Distributed
-#using GeometricalPredicates
 using DataFramesMeta
 using Luxor
+using StatsBase
+using Random
 
 function create_node_map()
     #get map data and intersections
@@ -79,12 +80,16 @@ function fill_map(model,group,long, lat, correction_factor)
     age = Int(round(mean(group.Alter_D)))
     below18 = get_amount(inhabitants,group.unter18_A)
     over65 = get_amount(inhabitants,group.ab65_A)
-    println("We have $(inhabitants) inhabitants with $(women) women, $(age) mean age and $(over65) old people \n")
+    rich = Int(get_amount(inhabitants,20))
+    middle = poor = Int(get_amount(inhabitants,40))
+    kaufkraft = mean(group.kaufkraft)
+
+    #println("We have $(inhabitants) inhabitants with $(women) women, $(age) mean age, $(over65) old people and $rich rich, $poor poor persons \n")
 
     #fill array with default agents of respective amount of agents with young/old age and gender
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(false,age)
+        agent_properties[Int(x)] = agent_tuple(false,age,wealth)
     end
     for w in 1:women
         agent_properties[rand(1:inhabitants)].women = true
@@ -96,8 +101,18 @@ function fill_map(model,group,long, lat, correction_factor)
         temp_arr = findall(x -> x.age == age, agent_properties)
         agent_properties[rand(temp_arr)].age = rand(66:100)
     end
+
+    #shuffle the agent_properties and add wealth data
+    shuffle!(agent_properties)
+    [agent.wealth = kaufkraft+rand(0:1000) for agent in agent_properties[1:rich]]
+    [agent.wealth = kaufkraft-100+rand(0:200) for agent in agent_properties[rich:(rich+middle)]]
+    [agent.wealth = kaufkraft-150+rand(0:100) for agent in agent_properties[(rich+middle):end]]
+    println("ranges are $rich for rich, $(rich+middle) for middle and $(length(agent_properties))")
+
+    #make groups of 1-4, group by wealth, age?
+
     for agent in agent_properties
-        add_agent!(rand(possible_nodes), model, agent.women, agent.age)
+        add_agent!(rand(possible_nodes), model, agent.women, agent.age, agent.wealth)
     end
     return
 end
@@ -115,17 +130,19 @@ mutable struct DemoAgent <: AbstractAgent
     pos::Int
     women::Bool
     age::Int8
+    wealth::Int16
 end
-
 
 mutable struct agent_tuple
     women::Bool
     age::Int16
+    wealth::Int16
 end
 
 function setup(model)
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
     #TODO optimize for loop so we dont use those weird nested for loops
+    #TODO maybe add a normal-distribution for wealth instead of the bins
 
     #create the nodemap and rawdata demography map and set the bounds for it
 
@@ -144,7 +161,7 @@ function setup(model)
     correction_factor = nv(nodes)
 
     #set up the variables and iterate over the groups to fill the node map
-    inhabitants = women = age = below18 = over65 = 0
+    inhabitants = women = age = below18 = over65 = wealth = 0
 
     DemoAgent(id;women,age) = DemoAgent(id,women,age)
     space = GraphSpace(nodes)
@@ -165,7 +182,8 @@ function setup(model)
     for (i, n) in enumerate(N)
         a = get_node_agents(n, model)
         #set color for empty nodes and populated nodes
-        length(a)==0 ? ncolor[i]=cgrad(:inferno)[1] : ncolor[i]=cgrad(:inferno)[256/length(a)]
+        b = [agent.wealth for agent in a]
+        ncolor[i]=cgrad(:inferno)[mean(b)/10]
         length(a)==0 ? nodesizevec[i] = 1 : nodesizevec[i] = 3
     end
     gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec, edgestrokec=cgrad(:inferno)[100])
