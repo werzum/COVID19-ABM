@@ -7,6 +7,8 @@ using DataFramesMeta
 using Luxor
 using StatsBase
 using Random
+using StatsBase
+using Distributions, StatsPlots
 
 function create_node_map()
     #get map data and intersections
@@ -89,36 +91,105 @@ function fill_map(model,group,long, lat, correction_factor)
     #fill array with default agents of respective amount of agents with young/old age and gender
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(false,age,wealth)
-    end
-    for w in 1:women
-        agent_properties[rand(1:inhabitants)].women = true
-    end
-    for y in 1:below18
-        agent_properties[rand(1:inhabitants)].age = rand(1:17)
-    end
-    for o in 1:over65
-        temp_arr = findall(x -> x.age == age, agent_properties)
-        agent_properties[rand(temp_arr)].age = rand(66:100)
+        agent_properties[Int(x)] = agent_tuple(false,age,wealth,0)
     end
 
-    #shuffle the agent_properties and add wealth data
+    [agent.women = true for agent in agent_properties[1:women]]
     shuffle!(agent_properties)
-    [agent.wealth = kaufkraft+rand(0:1000) for agent in agent_properties[1:rich]]
-    [agent.wealth = kaufkraft-100+rand(0:200) for agent in agent_properties[rich:(rich+middle)]]
-    [agent.wealth = kaufkraft-150+rand(0:100) for agent in agent_properties[(rich+middle):end]]
-    println("ranges are $rich for rich, $(rich+middle) for middle and $(length(agent_properties))")
+    [agent.age = rand(1:17) for agent_properties[1:young]]
+    [agent.age = rand(66:110) for agent_properties[young+1:(young+1+over65)]]
 
-    #make groups of 1-4, group by wealth, age?
+    #@simd
+    #auch möglich: Maschinencode anschauen mit
+    #TODO komische Verteilung: falsch gezogene Werte werden an max/min Position gesetzt?
+
+    #shuffle the agent_properties, sample #inhabitants, map it to the desired rang and assign those to the agent properties
+    wealth_distribution = BetaPrime(2.29201,108.029)
+    sample = rand(wealth_distribution,inhabitants)
+    #modify the sample so that its mean equals kaufkraft
+    multiplier = kaufkraft/mean(sample)
+    sample .* multiplier
+    #and assign the wealth to inhabitants
+    [agent.wealth = sample[i] for i in 1:inhabitants]
+    #println("ranges are $rich for rich, $(rich+middle) for middle and $(length(agent_properties))")
+
+    #Adding households to the map
+    #avg household size is 2, so
+    nodecount = Int(round(inhabitants/2))
+    nodes = sample(possible_nodes,nodecount)
+    nodesbefore = nv(model.space.graph)
+    add_households(nodes,model,lat,long)
+    #now pair agents and households within newly added nodes
+    noderange = [nodesbefore:nv(model.space.graph)-2;]
+    #hh distribution from paper, fitted Categorical to it
+    household_distribution = Categorical([0.41889017788089716, 0.337949535962877, 0.11898201856148492, 0.09058391337973705, 0.03359435421500387])
+    #sample = rand(household_distribution,inhabitants)
+    #for all newly added nodes, add #hh agents to it
+    #agent_index = noderange(or something)
+    for (index,value) in enumerate(noderange)
+        #for node in noderange
+        #hhhere = rand(hhdistr)
+        #for i in 1:hhhere
+        #agent_properties[agent_index+i]
+        #global agent_index+hhere
+        #sooooo ungefähr. Problem von Zukunftscarlo
+        agent_properties[index*2].household = value
+        agent_properties[index*2-1].household = value
+    end
+
+    filter!(e->e.household ≠ 0,agent_properties)
+
+    new_nodes = [Int[] for i in 1:length(nodes)]
+    model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
 
     for agent in agent_properties
-        add_agent!(rand(possible_nodes), model, agent.women, agent.age, agent.wealth)
+        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household)
     end
     return
 end
 
-
 #helper functions
+function add_households(nodes,model,lat,long)
+    #println("possible nodes are $possible_nodes with $inhabitants inhabitants")
+    randfloat = rand(0.0000:0.00001:0.0004)
+    graph = model.space.graph
+    nodecount = nv(graph)
+    #first add the vertices to the graph
+    add_vertices!(graph,length(nodes))
+    #then generate an edge and locate them to their parent node
+    for (index,value) in enumerate(nodes)
+        neighbors = node_neighbors(value,model)
+        coordinates = (lat[value]-0.0002+randfloat,long[value]-0.0002+randfloat)
+        #superhacky stuff that works like 1000%
+        add_edge!(graph, value, (nodecount+index))
+        push!(lat,coordinates[1])
+        push!(long,coordinates[2])
+    end
+end
+
+function get_additional_nodes(group,correction_factor)
+    #to keep the count consistent we have to pass the same checks as above
+    #TODO make those checks better or maybe put them in a function we can reuse
+    nrow(group) < 2 && return 0
+    #get the bounds and skip if the cell is empty
+    top = maximum(group[:Y])
+    bottom = minimum(group[:Y])
+    left = minimum(group[:X])
+    right = maximum(group[:X])
+    top-bottom == 0 && right-left == 0 && return 0
+    possible_nodes_long = findall(y -> isbetween(left,y,right), long)
+    possible_nodes_lat = findall(x -> isbetween(bottom, x, top), lat)
+    #get index of nodes to create a base of nodes we can later add our agents to
+    #and skip if there are no nodes within this space
+    possible_nodes = (intersect(possible_nodes_lat,possible_nodes_long))
+    length(possible_nodes) == 0 && return 0
+
+    #thats what we do: compute the nodes we add
+    inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
+    nodecount = Int(round(inhabitants/2))
+    return nodecount
+end
+
 function get_amount(inhabitants,input)
     return round((inhabitants*(mean(input)/100)))
 end
@@ -131,18 +202,21 @@ mutable struct DemoAgent <: AbstractAgent
     women::Bool
     age::Int8
     wealth::Int16
+    household::Int16
 end
 
 mutable struct agent_tuple
     women::Bool
     age::Int16
     wealth::Int16
+    household::Int16
 end
 
 function setup(model)
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
     #TODO optimize for loop so we dont use those weird nested for loops
     #TODO maybe add a normal-distribution for wealth instead of the bins
+    #TODO also add household distribution since even 2 are not realistic
 
     #create the nodemap and rawdata demography map and set the bounds for it
 
@@ -159,6 +233,12 @@ function setup(model)
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
     correction_factor = nv(nodes)
+    #get the future amount of nodes so we can properly allocate the graph space
+    #=nodes_with_households = nv(nodes)
+    for group in working_grid
+        global nodes_with_households = nodes_with_households+get_additional_nodes(group,correction_factor)
+    end
+    println("we have $(nodes_with_households) households instead of just $correction_factor")=#
 
     #set up the variables and iterate over the groups to fill the node map
     inhabitants = women = age = below18 = over65 = wealth = 0
@@ -167,7 +247,7 @@ function setup(model)
     space = GraphSpace(nodes)
     model = ABM(DemoAgent,space)
 
-    @time @inbounds for group in working_grid
+    @time @inbounds Thread.@threads for group in working_grid
         fill_map(model,group,long,lat,correction_factor)
     end
 
@@ -183,9 +263,10 @@ function setup(model)
         a = get_node_agents(n, model)
         #set color for empty nodes and populated nodes
         b = [agent.wealth for agent in a]
-        ncolor[i]=cgrad(:inferno)[mean(b)/10]
-        length(a)==0 ? nodesizevec[i] = 1 : nodesizevec[i] = 3
+        #ncolor[i]=cgrad(:inferno)[mean(b)/10]
+        length(a)==0 ? ncolor[i]=cgrad(:inferno)[1] : ncolor[i]=cgrad(:inferno)[mean(b)/10]
+        length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
     end
-    gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec, edgestrokec=cgrad(:inferno)[100])
+    gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
 
 end

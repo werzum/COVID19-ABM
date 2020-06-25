@@ -1,10 +1,12 @@
-@time for i =1:10000000
-    i^i
-end
+#code to generate the household size distriution
+pop = vcat(rand([1, 1], 17333, 1),rand([2,2], 13983, 1),rand([3, 3], 4923, 1),rand([4, 4], 3748, 1),rand([5, 5], 1390, 1))
+pop = pop[1:end,1]
+household = fit(Categorical,pop)
 
-@time Threads.@threads for i = 1:10000000
-    i^i
-end
+#saving a fig
+a = plot(household)
+savefig(a,"Graphics\\wealth_categorical.png")
+
 #leftovers from csv manipulation that are now merged into rawdata.csv
 
 #wrote changes to csv so we dont have to do basic cleaning again and again
