@@ -65,7 +65,7 @@ function create_demography_map()
     return rawdata
 end
 
-function fill_map(model,group,long, lat, correction_factor,schools)
+function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     nrow(group) < 2 && return
     #get the bounds and skip if the cell is empty
     top = maximum(group[:Y])
@@ -87,8 +87,6 @@ function fill_map(model,group,long, lat, correction_factor,schools)
     age = Int(round(mean(group.Alter_D)))
     below18 = get_amount(inhabitants,group.unter18_A)
     over65 = get_amount(inhabitants,group.ab65_A)
-    rich = Int(get_amount(inhabitants,20))
-    middle = poor = Int(get_amount(inhabitants,40))
     kaufkraft = mean(group.kaufkraft)
 
     #println("We have $(inhabitants) inhabitants with $(women) women, $(age) mean age, $(over65) old people and $rich rich, $poor poor persons \n")
@@ -96,7 +94,7 @@ function fill_map(model,group,long, lat, correction_factor,schools)
     #fill array with default agents of respective amount of agents with young/old age and gender
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(false,age,wealth,0)
+        agent_properties[Int(x)] = agent_tuple(false,age,wealth,0,0)
     end
 
     #randomly set women and young/old inhabitants
@@ -104,6 +102,7 @@ function fill_map(model,group,long, lat, correction_factor,schools)
     shuffle!(agent_properties)
     [agent.age = rand(1:17) for agent in agent_properties[1:below18]]
     [agent.age = rand(66:110) for agent in agent_properties[below18+1:(below18+1+over65)]]
+    shuffle!(agent_properties)
     #TODO komische Verteilung: falsch gezogene Werte werden an max/min Position gesetzt?
 
     #shuffle the agent_properties, sample #inhabitants, map it to the desired range and assign those to the agent properties
@@ -148,32 +147,47 @@ function fill_map(model,group,long, lat, correction_factor,schools)
         agent_index = agent_index+hhhere
     end
 
-    #the nodeindices of the schools we add
-    schoolrange = [noderange[end]+1:noderange[end]+1+length(schools);]
-    add_schools(schools, schoolrange, model,lat,long,possible_nodes)
+    #get people in school age
+    young_arr = filter(x -> isbetween(5,x.age,18), agent_properties)
+    #search the closest school and set it as their workplace
+    for agent in young_arr
+        search_dist = 0.005
+        school_nodes = findall(x -> abs(x.lat-lat[agent.household])<search_dist && abs(x.lon-long[agent.household])<search_dist,[values(schools)...])
+        #if no nodes are within range, expand it step by step
+        while length(school_nodes) == 0
+            search_dist*=2
+            school_nodes = findall(x -> abs(x.lat-lat[agent.household])<search_dist && abs(x.lon-long[agent.household])<search_dist,[values(schools)...])
+        end
+        agent.workplace = rand(school_nodes)
+    end
     #Agents.jl doesnt support the addition of nodes post-initalization
     #so we changed the agent_positions struct to mutable and concatenate an empty array of
     #the length of our new nodes to it
-    new_nodes = [Int[] for i in 1:length(nodes)+length(schools)]
+    new_nodes = [Int[] for i in 1:length(nodes)]
     model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
-    println("schoolrange is $schoolrange, noderange is $noderange")
 
     for agent in agent_properties
-        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household)
+        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace)
     end
     return
 end
 
 #helper functions
-function add_schools(schools,schoolrange,model,lat,long,possible_nodes)
+function add_schools(schools,schoolrange,model,lat,long)
     add_vertices!(model.space.graph,length(schools))
     #cool,huh? get the coordinates of possible lats
-    possible_lats = [lat[possible_nodes[i]] for i in 1:length(possible_nodes)]
-    possible_longs = [long[possible_nodes[i]] for i in 1:length(possible_nodes)]
+    #possible_lats = [lat[possible_nodes[i]] for i in 1:length(possible_nodes)]
+    #possible_longs = [long[possible_nodes[i]] for i in 1:length(possible_nodes)]
     index = 1
     for value in values(schools)
         #find nodes that are close to the school
-        school_nodes = intersect(findall(x -> abs(x-value.lat)<0.05,possible_lats),findall(x -> abs(x-value.lon)<0.05,possible_longs))
+        search_dist = 0.001
+        school_nodes = intersect(findall(x -> abs(x-value.lat)<search_dist,lat),findall(x -> abs(x-value.lon)<search_dist,long))
+        #if no nodes are within range, expand it step by step
+        while length(school_nodes) == 0
+            search_dist*=2
+            school_nodes = intersect(findall(x -> abs(x-value.lat)<search_dist,lat),findall(x -> abs(x-value.lon)<search_dist,long))
+        end
         #add an edge between one of the random nodes and the school to the map
         add_edge!(model.space.graph, rand(school_nodes), schoolrange[index])
         index+=1
@@ -235,6 +249,7 @@ mutable struct DemoAgent <: AbstractAgent
     age::Int8
     wealth::Int16
     household::Int32
+    workplace::Int32
 end
 
 mutable struct agent_tuple
@@ -242,6 +257,7 @@ mutable struct agent_tuple
     age::Int16
     wealth::Int16
     household::Int32
+    workplace::Int32
 end
 
 function setup(model)
@@ -257,7 +273,6 @@ function setup(model)
 
     #get the grid data within the boundaries of the node map
     working_grid = rawdata[(rawdata.X .> bounds.min_x) .& (rawdata.X .< bounds.max_x) .& (rawdata.Y .> bounds.min_y).& (rawdata.Y .< bounds.max_y),:]
-    working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=true)
 
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
@@ -270,8 +285,17 @@ function setup(model)
     space = GraphSpace(nodes)
     model = ABM(DemoAgent,space)
 
+    #the nodeindices of the schools we add
+    schoolrange = [nv(model.space)+1:nv(model.space)+length(schools);]
+    add_schools(schools,schoolrange, model,lat,long)
+    #add the newly added school nodes as agent positions
+    new_nodes = [Int[] for i in 1:length(schools)]
+    model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
+
+    #divide the grid into groups so we can iterate over it and fill the map with agents
+    working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=true)
     @time @inbounds for group in working_grid
-        fill_map(model,group,long,lat,correction_factor,schools)
+        fill_map(model,group,long,lat,correction_factor,schools,schoolrange)
     end
 
     return model
@@ -285,9 +309,10 @@ function setup(model)
     for (i, n) in enumerate(N)
         a = get_node_agents(n, model)
         #set color for empty nodes and populated nodes
-        b = [agent.wealth for agent in a]
+        b = [agent.workplace for agent in a]
+        b = mean(b)
         #ncolor[i]=cgrad(:inferno)[mean(b)/10]
-        length(a)==0 ? ncolor[i]=cgrad(:inferno)[1] : ncolor[i]=cgrad(:inferno)[mean(b)/10]
+        b==0 ? ncolor[i]=RGBA(1.0, 1.0, 1.0, 0.6) : ncolor[i]=RGBA(0.0, 0.6, 0.6, 0.8)
         length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
     end
 
