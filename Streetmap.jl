@@ -94,51 +94,58 @@ function fill_map(model,group,long, lat, correction_factor)
         agent_properties[Int(x)] = agent_tuple(false,age,wealth,0)
     end
 
+    #randomly set women and young/old inhabitants
     [agent.women = true for agent in agent_properties[1:women]]
     shuffle!(agent_properties)
-    [agent.age = rand(1:17) for agent_properties[1:young]]
-    [agent.age = rand(66:110) for agent_properties[young+1:(young+1+over65)]]
-
-    #@simd
-    #auch möglich: Maschinencode anschauen mit
+    [agent.age = rand(1:17) for agent in agent_properties[1:below18]]
+    [agent.age = rand(66:110) for agent in agent_properties[below18+1:(below18+1+over65)]]
     #TODO komische Verteilung: falsch gezogene Werte werden an max/min Position gesetzt?
 
-    #shuffle the agent_properties, sample #inhabitants, map it to the desired rang and assign those to the agent properties
+    #shuffle the agent_properties, sample #inhabitants, map it to the desired range and assign those to the agent properties
     wealth_distribution = BetaPrime(2.29201,108.029)
     sample = rand(wealth_distribution,inhabitants)
-    #modify the sample so that its mean equals kaufkraft
+    #modify and round the sample so that its mean equals kaufkraft
     multiplier = kaufkraft/mean(sample)
-    sample .* multiplier
+    sample = sample .* multiplier
+    sample = round.(sample)
     #and assign the wealth to inhabitants
-    [agent.wealth = sample[i] for i in 1:inhabitants]
-    #println("ranges are $rich for rich, $(rich+middle) for middle and $(length(agent_properties))")
-
-    #Adding households to the map
-    #avg household size is 2, so
-    nodecount = Int(round(inhabitants/2))
-    nodes = sample(possible_nodes,nodecount)
-    nodesbefore = nv(model.space.graph)
-    add_households(nodes,model,lat,long)
-    #now pair agents and households within newly added nodes
-    noderange = [nodesbefore:nv(model.space.graph)-2;]
-    #hh distribution from paper, fitted Categorical to it
-    household_distribution = Categorical([0.41889017788089716, 0.337949535962877, 0.11898201856148492, 0.09058391337973705, 0.03359435421500387])
-    #sample = rand(household_distribution,inhabitants)
-    #for all newly added nodes, add #hh agents to it
-    #agent_index = noderange(or something)
-    for (index,value) in enumerate(noderange)
-        #for node in noderange
-        #hhhere = rand(hhdistr)
-        #for i in 1:hhhere
-        #agent_properties[agent_index+i]
-        #global agent_index+hhere
-        #sooooo ungefähr. Problem von Zukunftscarlo
-        agent_properties[index*2].household = value
-        agent_properties[index*2-1].household = value
+    for (index,value) in enumerate(sample)
+        agent_properties[index].wealth = value
     end
 
-    filter!(e->e.household ≠ 0,agent_properties)
+    #Adding households to the map
+    #get inhabitants/2 random nodes
+    nodecount = Int(round(inhabitants/2))
+    nodes = rand(possible_nodes,nodecount)
+    nodesbefore = nv(model.space.graph)
+    #add them to the map
+    add_households(nodes,model,lat,long)
+    #now pair agents and households within newly added nodes
+    noderange = [nodesbefore+1:nodesbefore+length(nodes);]
+    #hh distribution from paper, fitted Categorical to it
+    household_distribution = Categorical([0.41889017788089716, 0.337949535962877, 0.11898201856148492, 0.09058391337973705, 0.03359435421500387])
+    #redraw the sample so that it fits to the number of inhabitants
+    #okay performance for 5 digits, for 6 performance starts to tank but highest nodesize is 23379 so its probably okay
+    sample = rand(household_distribution,nodecount)
+    while sum(sample) != inhabitants
+        sample = rand(household_distribution,nodecount)
+    end
 
+    #for all newly added nodes, set the household of #sample[i] agents to it.
+    #we thereby generate sampled households
+    agent_index = 0
+    for (index,value) in enumerate(noderange)
+        hhhere = sample[index]
+        for i in 1:hhhere
+            #set #hhere agents to this node and increment the agent_index counter
+            agent_properties[agent_index+i].household = value
+        end
+        agent_index = agent_index+hhhere
+    end
+
+    #Agents.jl doesnt support the addition of nodes post-initalization
+    #so we changed the agent_positions struct to mutable and concatenate an empty array of
+    #the length of our new nodes to it
     new_nodes = [Int[] for i in 1:length(nodes)]
     model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
 
@@ -156,7 +163,7 @@ function add_households(nodes,model,lat,long)
     nodecount = nv(graph)
     #first add the vertices to the graph
     add_vertices!(graph,length(nodes))
-    #then generate an edge and locate them to their parent node
+    #then generate an edge and locate them close to their parent node
     for (index,value) in enumerate(nodes)
         neighbors = node_neighbors(value,model)
         coordinates = (lat[value]-0.0002+randfloat,long[value]-0.0002+randfloat)
@@ -191,7 +198,7 @@ function get_additional_nodes(group,correction_factor)
 end
 
 function get_amount(inhabitants,input)
-    return round((inhabitants*(mean(input)/100)))
+    return Int(round((inhabitants*(mean(input)/100))))
 end
 
 isbetween(a, x, b) = a <= x <= b || b <= x <= a
@@ -202,14 +209,14 @@ mutable struct DemoAgent <: AbstractAgent
     women::Bool
     age::Int8
     wealth::Int16
-    household::Int16
+    household::Int32
 end
 
 mutable struct agent_tuple
     women::Bool
     age::Int16
     wealth::Int16
-    household::Int16
+    household::Int32
 end
 
 function setup(model)
@@ -233,21 +240,15 @@ function setup(model)
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
     correction_factor = nv(nodes)
-    #get the future amount of nodes so we can properly allocate the graph space
-    #=nodes_with_households = nv(nodes)
-    for group in working_grid
-        global nodes_with_households = nodes_with_households+get_additional_nodes(group,correction_factor)
-    end
-    println("we have $(nodes_with_households) households instead of just $correction_factor")=#
 
     #set up the variables and iterate over the groups to fill the node map
     inhabitants = women = age = below18 = over65 = wealth = 0
 
-    DemoAgent(id;women,age) = DemoAgent(id,women,age)
+    DemoAgent(id;women,age, wealth,household) = DemoAgent(id,women,age,wealth,household)
     space = GraphSpace(nodes)
     model = ABM(DemoAgent,space)
 
-    @time @inbounds Thread.@threads for group in working_grid
+    @time @inbounds for group in working_grid
         fill_map(model,group,long,lat,correction_factor)
     end
 
