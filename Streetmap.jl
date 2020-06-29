@@ -11,13 +11,18 @@ using StatsBase
 using Distributions, StatsPlots
 
 function create_node_map()
-    #get map data and intersections
+    #get map data and its inbounds
     aachen_map = get_map_data("SourceData\\aachen_bigger.osm", use_cache=false, only_intersections=true)
     aachen_graph = aachen_map.g
     bounds = aachen_map.bounds
 
+    #use the raw parseOSM function to obtain nodes tagged with "school"
+    aachen_schools = OpenStreetMapX.parseOSM("SourceData\\aachen_bigger.osm")
+    aachen_schools_nodes = filter((k,v) -> v[2] == "school", aachen_schools.features)
+    aachen_schools = filter(key -> haskey(aachen_schools_nodes,key.first),aachen_schools.nodes)
+
     #lat long of Aachen as reference frame
-    LLA_ref = LLA((bounds.min_y+bounds.max_y)/2, (bounds.min_x+bounds.max_x)/2, 0.0)
+    LLA_ref = LLA((bounds.max_y+bounds.min_y)/2, (bounds.max_x+bounds.min_x)/2, 0.0)
     #conversion to lat long coordinates
     LLA_Dict = OpenStreetMapX.LLA(aachen_map.nodes, LLA_ref)
     #filter the LLA_Dict so we have only the nodes we have in the graph
@@ -43,7 +48,7 @@ function create_node_map()
     #gplot(aachen_graph, LLA_Dict_longs, LLA_Dict_lats)
 
     #savegraph("Graphics\\aachen_graph.lgz", aachen_graph)
-    aachen_graph = aachen_graph, LLA_Dict_longs, LLA_Dict_lats, bounds
+    aachen_graph = aachen_graph, LLA_Dict_longs, LLA_Dict_lats, bounds, aachen_schools
 
     return aachen_graph
 end
@@ -60,7 +65,7 @@ function create_demography_map()
     return rawdata
 end
 
-function fill_map(model,group,long, lat, correction_factor)
+function fill_map(model,group,long, lat, correction_factor,schools)
     nrow(group) < 2 && return
     #get the bounds and skip if the cell is empty
     top = maximum(group[:Y])
@@ -143,11 +148,15 @@ function fill_map(model,group,long, lat, correction_factor)
         agent_index = agent_index+hhhere
     end
 
+    #the nodeindices of the schools we add
+    schoolrange = [noderange[end]+1:noderange[end]+1+length(schools);]
+    add_schools(schools, schoolrange, model,lat,long,possible_nodes)
     #Agents.jl doesnt support the addition of nodes post-initalization
     #so we changed the agent_positions struct to mutable and concatenate an empty array of
     #the length of our new nodes to it
-    new_nodes = [Int[] for i in 1:length(nodes)]
+    new_nodes = [Int[] for i in 1:length(nodes)+length(schools)]
     model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
+    println("schoolrange is $schoolrange, noderange is $noderange")
 
     for agent in agent_properties
         add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household)
@@ -156,9 +165,25 @@ function fill_map(model,group,long, lat, correction_factor)
 end
 
 #helper functions
+function add_schools(schools,schoolrange,model,lat,long,possible_nodes)
+    add_vertices!(model.space.graph,length(schools))
+    #cool,huh? get the coordinates of possible lats
+    possible_lats = [lat[possible_nodes[i]] for i in 1:length(possible_nodes)]
+    possible_longs = [long[possible_nodes[i]] for i in 1:length(possible_nodes)]
+    index = 1
+    for value in values(schools)
+        #find nodes that are close to the school
+        school_nodes = intersect(findall(x -> abs(x-value.lat)<0.05,possible_lats),findall(x -> abs(x-value.lon)<0.05,possible_longs))
+        #add an edge between one of the random nodes and the school to the map
+        add_edge!(model.space.graph, rand(school_nodes), schoolrange[index])
+        index+=1
+        #and append the coordinates of the school to the lats and longs for plotting
+        push!(lat,value.lat)
+        push!(long,value.lon)
+    end
+end
+
 function add_households(nodes,model,lat,long)
-    #println("possible nodes are $possible_nodes with $inhabitants inhabitants")
-    randfloat = rand(0.0000:0.00001:0.0004)
     graph = model.space.graph
     nodecount = nv(graph)
     #first add the vertices to the graph
@@ -166,7 +191,7 @@ function add_households(nodes,model,lat,long)
     #then generate an edge and locate them close to their parent node
     for (index,value) in enumerate(nodes)
         neighbors = node_neighbors(value,model)
-        coordinates = (lat[value]-0.0002+randfloat,long[value]-0.0002+randfloat)
+        coordinates = (lat[value]-0.0002,long[value]-0.0002)
         #superhacky stuff that works like 1000%
         add_edge!(graph, value, (nodecount+index))
         push!(lat,coordinates[1])
@@ -221,16 +246,13 @@ end
 
 function setup(model)
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
-    #TODO optimize for loop so we dont use those weird nested for loops
-    #TODO maybe add a normal-distribution for wealth instead of the bins
-    #TODO also add household distribution since even 2 are not realistic
 
     #create the nodemap and rawdata demography map and set the bounds for it
 
     r1 = @spawn create_node_map()
     r2 = @spawn create_demography_map()
 
-    nodes,long,lat,bounds = fetch(r1)
+    nodes,long,lat,bounds,schools = fetch(r1)
     rawdata = fetch(r2)
 
     #get the grid data within the boundaries of the node map
@@ -249,7 +271,7 @@ function setup(model)
     model = ABM(DemoAgent,space)
 
     @time @inbounds for group in working_grid
-        fill_map(model,group,long,lat,correction_factor)
+        fill_map(model,group,long,lat,correction_factor,schools)
     end
 
     return model
@@ -268,6 +290,7 @@ function setup(model)
         length(a)==0 ? ncolor[i]=cgrad(:inferno)[1] : ncolor[i]=cgrad(:inferno)[mean(b)/10]
         length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
     end
+
     gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
 
 end
