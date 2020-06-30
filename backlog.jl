@@ -2,10 +2,23 @@
 pop = vcat(rand([1, 1], 17333, 1),rand([2,2], 13983, 1),rand([3, 3], 4923, 1),rand([4, 4], 3748, 1),rand([5, 5], 1390, 1))
 pop = pop[1:end,1]
 household = fit(Categorical,pop)
-
+#code for workplacesize
+amount_sizes = [452,1299,799,667,595,270,200]
+sum_sizes = sum(amount_sizes)
+size_probabilities = amount_sizes./sum_sizes
+#redid this so we have continuous numbers and not that Categorical stuff
+#create a range
+range = vcat(rand(1:7,452),rand(8:17,1299),rand(18:33,799),rand(34:67,667),rand(68:167,595),rand(168:333,270),rand(334:667,200))
+#Rayleigh seems to work best, using this for now
+workplacesize_distribution = fit(Rayleigh,range)
+plot(workplacesize_distribution)
+#old Categorical workplacesize
+size_classes = [1:7, 8:17, 18:33, 34:67, 68:167, 168:333, 334:667]
+size_probabilities = [0.10555815039701075, 0.30336291452592246, 0.1865950490425035, 0.1557683325548809, 0.13895375992526857, 0.06305464736104624, 0.046707146193367584]
+workplacesize_distribution = DiscreteNonParametric(size_classes,size_probabilities)
 #saving a fig
-a = plot(household)
-savefig(a,"Graphics\\wealth_categorical.png")
+a = plot(workplacesize_distribution)
+savefig(a,"Graphics\\workplace_size_rayleigh.png")
 
 #leftovers from csv manipulation that are now merged into rawdata.csv
 
