@@ -12,7 +12,7 @@ using Distributions, StatsPlots
 
 function create_node_map()
     #get map data and its inbounds
-    aachen_map = get_map_data("SourceData\\aachen_bigger.osm", use_cache=false, only_intersections=true)
+    aachen_map = get_map_data("SourceData\\aachen_bigger.osm", use_cache=true, only_intersections=true)
     aachen_graph = aachen_map.g
     bounds = aachen_map.bounds
 
@@ -121,11 +121,10 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     #get inhabitants/2 random nodes
     nodecount = Int(round(inhabitants/2))
     nodes = rand(possible_nodes,nodecount)
-    nodesbefore = nv(model.space.graph)
+    noderange = [nv(model.space.graph)+1:nv(model.space.graph)+length(nodes);]
     #add them to the map
     add_households(nodes,model,lat,long)
     #now pair agents and households within newly added nodes
-    noderange = [nodesbefore+1:nodesbefore+length(nodes);]
     #hh distribution from paper, fitted Categorical to it
     household_distribution = Categorical([0.41889017788089716, 0.337949535962877, 0.11898201856148492, 0.09058391337973705, 0.03359435421500387])
     #redraw the sample so that it fits to the number of inhabitants
@@ -134,7 +133,6 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     while sum(sample) != inhabitants
         sample = rand(household_distribution,nodecount)
     end
-
     #for all newly added nodes, set the household of #sample[i] agents to it.
     #we thereby generate sampled households
     agent_index = 0
@@ -148,9 +146,9 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     end
 
     #get people in school age
-    young_arr = filter(x -> isbetween(5,x.age,18), agent_properties)
+    young_people = filter(x -> isbetween(5,x.age,18), agent_properties)
     #search the closest school and set it as their workplace
-    for agent in young_arr
+    for agent in young_people
         search_dist = 0.005
         school_nodes = findall(x -> abs(x.lat-lat[agent.household])<search_dist && abs(x.lon-long[agent.household])<search_dist,[values(schools)...])
         #if no nodes are within range, expand it step by step
@@ -160,12 +158,32 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
         end
         agent.workplace = rand(school_nodes)
     end
-    #Agents.jl doesnt support the addition of nodes post-initalization
-    #so we changed the agent_positions struct to mutable and concatenate an empty array of
-    #the length of our new nodes to it
-    new_nodes = [Int[] for i in 1:length(nodes)]
-    model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
 
+    #get people in working age
+    middle_people = filter(x -> isbetween(18,x.age,65), agent_properties)
+    #get a distribution of workplacesizes, draw middle_people/average workplace size workplaces and redraw so that it fits the number of middle_people
+    workplacesize_distribution = Categorical([0.2, 0.3, 0.2, 0.2, 0.1])
+    workplacesizes = rand(workplacesize_distribution,Int(round(length(middle_people)/mean(workplacesize_distribution))))
+    workplacerange = [nv(model.space.graph)+1:nv(model.space.graph)+length(workplacesizes);]
+    while sum(workplacesizes) != length(middle_people)
+        workplacesizes = rand(workplacesize_distribution,Int(round(length(middle_people)/mean(workplacesize_distribution))))
+    end
+    #add workplaces to the graph
+    add_workplaces(workplacesizes,model,lat,long,possible_nodes,workplacerange)
+    #and distribute the agents to the workspaces
+    middle_people = filter(x -> isbetween(18,x.age,65), agent_properties)
+    agent_index = 0
+    #iterate through the workplaces, and per workspace add n agents from middle_people to it by setting it as their workspace.
+    for (index,value) in enumerate(workplacerange)
+        workplace = workplacesizes[index]
+        for i in 1:workplace
+            middle_people[agent_index+i].workplace = value
+        end
+        agent_index = agent_index+workplace
+    end
+
+    #and finally add all agent properties to the model
+    println(agent_properties)
     for agent in agent_properties
         add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace)
     end
@@ -173,11 +191,24 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
 end
 
 #helper functions
+
+function add_workplaces(workplacesizes,model,lat,long,possible_nodes,workplacerange)
+    add_nodes_to_model(model,workplacesizes)
+    #then generate an edge and locate them close to their parent node
+    index = 1
+    for i in 1:length(workplacesizes)
+        #set the coordinate of the school at a random point in the map, connect to it
+        adjacent_node = rand(possible_nodes)
+        add_edge!(model.space.graph, adjacent_node, workplacerange[i])
+        #and set the lat,longs with a little offset to that node
+        push!(lat,lat[adjacent_node]+0.0002)
+        push!(long,long[adjacent_node]+0.0002)
+    end
+end
+
+
 function add_schools(schools,schoolrange,model,lat,long)
-    add_vertices!(model.space.graph,length(schools))
-    #cool,huh? get the coordinates of possible lats
-    #possible_lats = [lat[possible_nodes[i]] for i in 1:length(possible_nodes)]
-    #possible_longs = [long[possible_nodes[i]] for i in 1:length(possible_nodes)]
+    add_nodes_to_model(model,schools)
     index = 1
     for value in values(schools)
         #find nodes that are close to the school
@@ -198,19 +229,27 @@ function add_schools(schools,schoolrange,model,lat,long)
 end
 
 function add_households(nodes,model,lat,long)
-    graph = model.space.graph
-    nodecount = nv(graph)
-    #first add the vertices to the graph
-    add_vertices!(graph,length(nodes))
+    nodecount=nv(model.space.graph)
+    add_nodes_to_model(model, nodes)
     #then generate an edge and locate them close to their parent node
     for (index,value) in enumerate(nodes)
         neighbors = node_neighbors(value,model)
         coordinates = (lat[value]-0.0002,long[value]-0.0002)
         #superhacky stuff that works like 1000%
-        add_edge!(graph, value, (nodecount+index))
+        add_edge!(model.space.graph, value, (nodecount+index))
         push!(lat,coordinates[1])
         push!(long,coordinates[2])
     end
+end
+
+function add_nodes_to_model(model,nodes)
+    #first add the vertices to the graph
+    add_vertices!(model.space.graph,length(nodes))
+    #Agents.jl doesnt support the addition of nodes post-initalization
+    #so I changed the agent_positions struct to mutable and concatenate an empty array of
+    #the length of our new nodes to it
+    new_nodes = [Int[] for i in 1:length(nodes)]
+    model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
 end
 
 function get_additional_nodes(group,correction_factor)
@@ -262,12 +301,15 @@ end
 
 function setup(model)
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
+    #TODO probably caused by linearization of LLA coordinates, how to fix this? Where should the point of reference be?
+    #TODO add proper workplace size distribution instead of this improvised one
+    #TODO fix agent to workplace mapping so that richer agents preferredly work in smaller workplaces
+    #TODO fix wrong school workspace nodes - are now 1,2,3 instead of newly added nodes.
+    #TODO add arrays to keep track of the schools, homes, workplaces, so that we can set custom infection rates and so forth for them.
 
     #create the nodemap and rawdata demography map and set the bounds for it
-
     r1 = @spawn create_node_map()
     r2 = @spawn create_demography_map()
-
     nodes,long,lat,bounds,schools = fetch(r1)
     rawdata = fetch(r2)
 
@@ -278,19 +320,15 @@ function setup(model)
     #should scale nicely with graph size to keep agent number in check
     correction_factor = nv(nodes)
 
-    #set up the variables and iterate over the groups to fill the node map
+    #set up the variables, structs etc.
     inhabitants = women = age = below18 = over65 = wealth = 0
-
     DemoAgent(id;women,age, wealth,household) = DemoAgent(id,women,age,wealth,household)
     space = GraphSpace(nodes)
     model = ABM(DemoAgent,space)
 
-    #the nodeindices of the schools we add
+    #the nodeindices of the schools we add to the model
     schoolrange = [nv(model.space)+1:nv(model.space)+length(schools);]
-    add_schools(schools,schoolrange, model,lat,long)
-    #add the newly added school nodes as agent positions
-    new_nodes = [Int[] for i in 1:length(schools)]
-    model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
+    add_schools(schools,schoolrange,model,lat,long)
 
     #divide the grid into groups so we can iterate over it and fill the map with agents
     working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=true)
