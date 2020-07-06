@@ -48,7 +48,7 @@ function create_node_map()
     #gplot(aachen_graph, LLA_Dict_longs, LLA_Dict_lats)
 
     #savegraph("Graphics\\aachen_graph.lgz", aachen_graph)
-    aachen_graph = aachen_graph, LLA_Dict_longs, LLA_Dict_lats, bounds, aachen_schools
+    aachen_graph = aachen_graph, LLA_Dict_longs, LLA_Dict_lats, bounds, aachen_schools, aachen_map
 
     return aachen_graph
 end
@@ -165,14 +165,15 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     #workplacesize_distribution from paper (Stottrop) that details average sqm/bureau, which is divided by 15 (and rounded) to obtain expected max number of workplaces
     #capped the workplacesize at 667 since more is not realistic and kept the fixed rates so they dont have to be recomputed
     workplacesize_distribution = Rayleigh(96.31905979491185)
+    #draw randomly from the distribution
     workplacesizes = Int.(round.(rand(workplacesize_distribution,Int(round(length(middle_people)/mean(workplacesize_distribution))))))
+    #generate one workplace where all people go if it is so small that the rounding sets #workplaces to zero
     if length(workplacesizes) == 0
         push!(workplacesizes,length(middle_people))
     end
+    #redraw workplaces until it fits the #people
     workplacerange = [nv(model.space)+1:nv(model.space)+length(workplacesizes);]
     while sum(workplacesizes) != length(middle_people)
-        println(workplacesizes)
-        println("workplacesizes are $(sum(workplacesizes)) length(middle_people) is $(length(middle_people))")
         workplacesizes = Int.(round.(rand(workplacesize_distribution,Int(round(length(middle_people)/mean(workplacesize_distribution))))))
     end
     #add workplaces to the graph
@@ -214,7 +215,7 @@ function add_workplaces(workplacesizes,model,lat,long,possible_nodes,workplacera
 end
 
 
-function add_schools(schools,schoolrange,model,lat,long)
+function add_schools(schools,schoolrange,model,lat,long,map_data)
     add_nodes_to_model(model,schools)
     index = 1
     for value in values(schools)
@@ -232,10 +233,11 @@ function add_schools(schools,schoolrange,model,lat,long)
         #and append the coordinates of the school to the lats and longs for plotting
         push!(lat,value.lat)
         push!(long,value.lon)
+        point_to_nodes((value.lat,value.lon),map_data)
     end
 end
 
-function add_households(nodes,model,lat,long)
+function add_households(nodes,model,lat,long,map_data)
     nodecount=nv(model.space)
     add_nodes_to_model(model, nodes)
     #then generate an edge and locate them close to their parent node
@@ -246,6 +248,7 @@ function add_households(nodes,model,lat,long)
         add_edge!(model.space.graph, value, (nodecount+index))
         push!(lat,coordinates[1])
         push!(long,coordinates[2])
+        point_to_nodes(coordinates,map_data)
     end
 end
 
@@ -257,29 +260,6 @@ function add_nodes_to_model(model,nodes)
     #the length of our new nodes to it
     new_nodes = [Int[] for i in 1:length(nodes)]
     model.space.agent_positions = vcat(model.space.agent_positions,new_nodes)
-end
-
-function get_additional_nodes(group,correction_factor)
-    #to keep the count consistent we have to pass the same checks as above
-    #TODO make those checks better or maybe put them in a function we can reuse
-    nrow(group) < 2 && return 0
-    #get the bounds and skip if the cell is empty
-    top = maximum(group[:Y])
-    bottom = minimum(group[:Y])
-    left = minimum(group[:X])
-    right = maximum(group[:X])
-    top-bottom == 0 && right-left == 0 && return 0
-    possible_nodes_long = findall(y -> isbetween(left,y,right), long)
-    possible_nodes_lat = findall(x -> isbetween(bottom, x, top), lat)
-    #get index of nodes to create a base of nodes we can later add our agents to
-    #and skip if there are no nodes within this space
-    possible_nodes = (intersect(possible_nodes_lat,possible_nodes_long))
-    length(possible_nodes) == 0 && return 0
-
-    #thats what we do: compute the nodes we add
-    inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
-    nodecount = Int(round(inhabitants/2))
-    return nodecount
 end
 
 function get_amount(inhabitants,input)
@@ -306,17 +286,17 @@ mutable struct agent_tuple
     workplace::Int32
 end
 
+
 function setup(model)
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
     #TODO probably caused by linearization of LLA coordinates, how to fix this? Where should the point of reference be?
-    #TODO add proper workplace size distribution instead of this improvised one
     #TODO fix agent to workplace mapping so that richer agents preferredly work in smaller workplaces
     #TODO add arrays to keep track of the schools, homes, workplaces, so that we can set custom infection rates and so forth for them.
 
     #create the nodemap and rawdata demography map and set the bounds for it
     r1 = @spawn create_node_map()
     r2 = @spawn create_demography_map()
-    nodes,long,lat,bounds,schools = fetch(r1)
+    nodes,long,lat,bounds,schools,map_data = fetch(r1)
     rawdata = fetch(r2)
 
     #get the grid data within the boundaries of the node map
@@ -334,7 +314,7 @@ function setup(model)
 
     #the nodeindices of the schools we add to the model
     schoolrange = [nv(model.space)+1:nv(model.space)+length(schools);]
-    add_schools(schools,schoolrange,model,lat,long)
+    add_schools(schools,schoolrange,model,lat,long,map_data)
 
     #divide the grid into groups so we can iterate over it and fill the map with agents
     working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=true)
@@ -363,3 +343,26 @@ function setup(model)
     gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
 
 end
+
+heuristic(u,v) = OpenStreetMapX.get_distance(u, v, m.nodes, m.n)
+a_star_algorithm(model.space.graph,  # the g
+                          1,           # the start vertex
+                          10,           # the end vertex
+                          LightGraphs.weights(model.space.graph),
+                          heuristic)
+
+point_to_nodes((50.761,6.11),aachen_map)
+
+OpenStreetMapX.find_route()
+OpenStreetMapX.shortest_route(aachen_map,20,100)
+
+@time a_star(model.space.graph,1,100)
+
+a_star(model.space.graph,1,100,aachen_map.w)
+a = LLA(50.76121,6.111)
+OpenStreetMapX.add_new_node!(aachen_map.nodes,ENU(a,LLA_ref))
+OpenStreetMapX.add_new_node!()
+c,d = OpenStreetMapX.get_edges(aachen_map.nodes,aachen_map.roadways)
+weights = OpenStreetMapX.distance(aachen_map.nodes,c)
+
+boundary_point()

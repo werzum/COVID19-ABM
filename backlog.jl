@@ -9,6 +9,11 @@ size_probabilities = amount_sizes./sum_sizes
 #redid this so we have continuous numbers and not that Categorical stuff
 #create a range
 range = vcat(rand(1:7,452),rand(8:17,1299),rand(18:33,799),rand(34:67,667),rand(68:167,595),rand(168:333,270),rand(334:667,200))
+wealthrange = vcat(rand(1:7,452),rand(8:17,1299),rand(18:33,799),rand(34:67,667),rand(68:167,595),rand(168:333,270),rand(334:667,200))
+testrange = hcat(range,wealthrange)
+testdist = fit(Poisson, range)
+plot(testdist)
+
 #Rayleigh seems to work best, using this for now
 workplacesize_distribution = fit(Rayleigh,range)
 plot(workplacesize_distribution)
