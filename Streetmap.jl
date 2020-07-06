@@ -1,4 +1,4 @@
-using OpenStreetMapX, LightGraphs, GraphPlot, GraphRecipes
+using OpenStreetMapX, OpenStreetMapXPlot, LightGraphs, GraphPlot, GraphRecipes
 using CSV, DataFrames
 using Agents, AgentsPlots
 using Statistics
@@ -12,7 +12,7 @@ using Distributions, StatsPlots
 
 function create_node_map()
     #get map data and its inbounds
-    aachen_map = get_map_data("SourceData\\aachen_bigger.osm", use_cache=true, only_intersections=true)
+    aachen_map = get_map_data("SourceData\\aachen_bigger.osm", use_cache=false, only_intersections=true)
     aachen_graph = aachen_map.g
     bounds = aachen_map.bounds
 
@@ -93,10 +93,13 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
 
     #fill array with default agents of respective amount of agents with young/old age and gender
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
-    for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(false,age,wealth,0,0)
-    end
+    undef_vector = LightGraphs.SimpleGraphs.SimpleEdge{Int64}[]
 
+
+    for x in 1:inhabitants
+        agent_properties[Int(x)] = agent_tuple(false,age,wealth,0,0,undef_vector)
+    end
+undef
     #randomly set women and young/old inhabitants
     [agent.women = true for agent in agent_properties[1:women]]
     shuffle!(agent_properties)
@@ -190,9 +193,10 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
         agent_index = agent_index+workplace
     end
 
-    #and, finally, add all agent properties to the model
+    #and, finally, compute add all agent properties to the model
     for agent in agent_properties
-        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace)
+        agent_route = a_star(model.space.graph,agent.household,agent.workplace)
+        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent_route)
     end
     return
 end
@@ -215,7 +219,7 @@ function add_workplaces(workplacesizes,model,lat,long,possible_nodes,workplacera
 end
 
 
-function add_schools(schools,schoolrange,model,lat,long,map_data)
+function add_schools(schools,schoolrange,model,lat,long)
     add_nodes_to_model(model,schools)
     index = 1
     for value in values(schools)
@@ -233,11 +237,10 @@ function add_schools(schools,schoolrange,model,lat,long,map_data)
         #and append the coordinates of the school to the lats and longs for plotting
         push!(lat,value.lat)
         push!(long,value.lon)
-        point_to_nodes((value.lat,value.lon),map_data)
     end
 end
 
-function add_households(nodes,model,lat,long,map_data)
+function add_households(nodes,model,lat,long)
     nodecount=nv(model.space)
     add_nodes_to_model(model, nodes)
     #then generate an edge and locate them close to their parent node
@@ -248,7 +251,6 @@ function add_households(nodes,model,lat,long,map_data)
         add_edge!(model.space.graph, value, (nodecount+index))
         push!(lat,coordinates[1])
         push!(long,coordinates[2])
-        point_to_nodes(coordinates,map_data)
     end
 end
 
@@ -276,6 +278,7 @@ mutable struct DemoAgent <: AbstractAgent
     wealth::Int16
     household::Int32
     workplace::Int32
+    workplaceroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
 end
 
 mutable struct agent_tuple
@@ -284,6 +287,7 @@ mutable struct agent_tuple
     wealth::Int16
     household::Int32
     workplace::Int32
+    workplaceroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
 end
 
 
@@ -314,7 +318,7 @@ function setup(model)
 
     #the nodeindices of the schools we add to the model
     schoolrange = [nv(model.space)+1:nv(model.space)+length(schools);]
-    add_schools(schools,schoolrange,model,lat,long,map_data)
+    add_schools(schools,schoolrange,model,lat,long)
 
     #divide the grid into groups so we can iterate over it and fill the map with agents
     working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=true)
@@ -327,7 +331,6 @@ function setup(model)
     N = Agents.nodes(model)
     ncolor = Vector(undef, length(N))
     nodesizevec = Vector(undef, length(N))
-
     #color and size the nodes according to the population
     #could set size to population and color to other attributes (sickness, belief,...)
     for (i, n) in enumerate(N)
@@ -335,34 +338,24 @@ function setup(model)
         #set color for empty nodes and populated nodes
         b = [agent.workplace for agent in a]
         b = mean(b)
-        #ncolor[i]=cgrad(:inferno)[mean(b)/10]
+        #ncolor[i]=cgrad(:]inferno)[mean(b)/10]
         b==0 ? ncolor[i]=RGBA(1.0, 1.0, 1.0, 0.6) : ncolor[i]=RGBA(0.0, 0.6, 0.6, 0.8)
         length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
     end
-
     gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
-
 end
 
-heuristic(u,v) = OpenStreetMapX.get_distance(u, v, m.nodes, m.n)
-a_star_algorithm(model.space.graph,  # the g
-                          1,           # the start vertex
-                          10,           # the end vertex
-                          LightGraphs.weights(model.space.graph),
-                          heuristic)
+agent = random_agent(model)
+thisroute = agent.workplaceroute
 
-point_to_nodes((50.761,6.11),aachen_map)
-
-OpenStreetMapX.find_route()
-OpenStreetMapX.shortest_route(aachen_map,20,100)
-
-@time a_star(model.space.graph,1,100)
-
-a_star(model.space.graph,1,100,aachen_map.w)
-a = LLA(50.76121,6.111)
-OpenStreetMapX.add_new_node!(aachen_map.nodes,ENU(a,LLA_ref))
-OpenStreetMapX.add_new_node!()
-c,d = OpenStreetMapX.get_edges(aachen_map.nodes,aachen_map.roadways)
-weights = OpenStreetMapX.distance(aachen_map.nodes,c)
-
-boundary_point()
+edgecolors = [colorant"lightgray" for i in  1:ne(model.space.graph)]
+for i in thisroute
+    if has_edge(model.space.graph,i)
+        for (index,value) in enumerate(edges(model.space.graph))
+            if(i == value)
+                println("and colored edge")
+                edgecolors[index] = colorant"orange"
+            end
+        end
+    end
+end

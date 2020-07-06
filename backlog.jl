@@ -72,3 +72,27 @@ for row in iterator
     inside = [isinside(p,pointarray;allowonedge=true) for p in pointarr]
     rawdata[inside,:kaufkraft] = row.:relative_kaufkraftarmut
 end
+
+#Code for weighted map route calculation
+heuristic(u,v) = OpenStreetMapX.get_distance(u, v, m.nodes, m.n)
+a_star_algorithm(model.space.graph,  # the g
+                          1,           # the start vertex
+                          10,           # the end vertex
+                          LightGraphs.weights(model.space.graph),
+                          heuristic)
+
+point_to_nodes((50.761,6.11),aachen_map)
+
+OpenStreetMapX.find_route()
+OpenStreetMapX.shortest_route(aachen_map,20,100)
+
+@time a = a_star(model.space.graph,1,100)
+a[2]
+a_star(model.space.graph,1,100,aachen_map.w)
+a = LLA(50.76121,6.111)
+OpenStreetMapX.add_new_node!(aachen_map.nodes,ENU(a,LLA_ref))
+OpenStreetMapX.add_new_node!()
+c,d = OpenStreetMapX.get_edges(aachen_map.nodes,aachen_map.roadways)
+weights = OpenStreetMapX.distance(aachen_map.nodes,c)
+
+boundary_point()
