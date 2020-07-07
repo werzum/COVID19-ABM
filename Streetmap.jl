@@ -1,4 +1,4 @@
-using OpenStreetMapX, OpenStreetMapXPlot, LightGraphs, GraphPlot, GraphRecipes
+using OpenStreetMapX, LightGraphs, GraphPlot, GraphRecipes
 using CSV, DataFrames
 using Agents, AgentsPlots
 using Statistics
@@ -204,6 +204,10 @@ end
 
 
 #helper functions
+function exp_workplace(x)
+    return (2990.168x^-0.7758731)-x/10+rand(0:(2*x/10))
+end
+
 function add_workplaces(workplacesizes,model,lat,long,possible_nodes,workplacerange)
     add_nodes_to_model(model,workplacesizes)
     #then generate an edge and locate them close to their parent node
@@ -327,35 +331,8 @@ function setup(model)
     end
 
     return model
-
-    N = Agents.nodes(model)
-    ncolor = Vector(undef, length(N))
-    nodesizevec = Vector(undef, length(N))
-    #color and size the nodes according to the population
-    #could set size to population and color to other attributes (sickness, belief,...)
-    for (i, n) in enumerate(N)
-        a = get_node_agents(n, model)
-        #set color for empty nodes and populated nodes
-        b = [agent.workplace for agent in a]
-        b = mean(b)
-        #ncolor[i]=cgrad(:]inferno)[mean(b)/10]
-        b==0 ? ncolor[i]=RGBA(1.0, 1.0, 1.0, 0.6) : ncolor[i]=RGBA(0.0, 0.6, 0.6, 0.8)
-        length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
-    end
-    gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
 end
 
-agent = random_agent(model)
-thisroute = agent.workplaceroute
+workplace_arr = exp_workplace.(wealth_data)
 
-edgecolors = [colorant"lightgray" for i in  1:ne(model.space.graph)]
-for i in thisroute
-    if has_edge(model.space.graph,i)
-        for (index,value) in enumerate(edges(model.space.graph))
-            if(i == value)
-                println("and colored edge")
-                edgecolors[index] = colorant"orange"
-            end
-        end
-    end
-end
+plot(workplace_arr)

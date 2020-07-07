@@ -1,35 +1,47 @@
-function create_data(model, steps)
-    infected(x) = count(i == :I for i in x)
-    recovered(x) = count(i == :R for i in x)
-    susceptible(x) = count(i == :S for i in x)
-    data_to_collect = Dict(:status => [infected, recovered, susceptible, length])
-    data = step!(model, agent_step!, steps, data_to_collect)
-    return data
-end
-
-function create_graph()
-    data = create_data(model,100)
-    N = sum(fullmap) # Total initial population
-    x = data.step
-    p = Plots.plot(x, log10.(data[:, Symbol("infected(status)")]), label = "infected")
-    plot!(p, x, log10.(data[:, Symbol("recovered(status)")]), label = "recovered")
-    plot!(p, x, log10.(data[:, Symbol("susceptible(status)")]), label = "susceptible")
-    dead = log10.(N .- data[:, Symbol("length(status)")])
-    plot!(p, x, dead, label = "dead")
-    xlabel!(p, "steps")
-    ylabel!(p, "log( count )")
-    p
-end
-
-function create_gif()
-    properties = [:status, :pos]
-    #plot the ith step of the simulation
-    anim = @animate for i ∈ 1:50
-        data = step!(model, agent_step!, 1, properties)
-        p = plot2D(data, :status, nodesize=3)
-        title!(p, "Day $(i)")
+function draw_map(model,lat,long)
+    N = Agents.nodes(model)
+    ncolor = Vector(undef, length(N))
+    nodesizevec = Vector(undef, length(N))
+    #color and size the nodes according to the population
+    #could set size to population and color to other attributes (sickness, belief,...)
+    for (i, n) in enumerate(N)
+        a = get_node_agents(n, model)
+        #set color for empty nodes and populated nodes
+        b = [agent.workplace for agent in a]
+        b = mean(b)
+        #ncolor[i]=cgrad(:]inferno)[mean(b)/10]
+        b==0 ? ncolor[i]=RGBA(1.0, 1.0, 1.0, 0.6) : ncolor[i]=RGBA(0.0, 0.6, 0.6, 0.8)
+        length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
     end
-    gif(anim, "Graphics\\covid_evolution.gif", fps = 3);
+    gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
 end
 
-export create_graph, create_gif, create_data
+function draw_route(model,lat,long)
+    #draw random agent and get the route
+    agent = random_agent(model)
+    thisroute = agent.workplaceroute
+    #make array of normal edge colors
+    edgecolors = [colorant"lightgray" for i in  1:ne(model.space.graph)]
+    for i in thisroute
+        start =  src(i)
+        fin = dst(i)
+        if has_edge(model.space.graph,start,fin) || has_edge(model.space.graph,fin,start)
+            edge1 = LightGraphs.SimpleEdge(start, fin)
+            edge2 = LightGraphs.SimpleEdge(fin, start)
+            #check for all edges if its equal (forward and backward) to the route edge, if so set color to yellow
+            for (index,value) in enumerate(edges(model.space.graph))
+                if(value == edge1 || value == edge2 )
+                    edgecolors[index] = colorant"yellow"
+                    continue
+                end
+            end
+        end
+    end
+    gplot(model.space.graph, long, lat, edgestrokec=edgecolors)
+end
+
+#=savefig examples
+savefig(a,"Graphics\\example_route.png")
+using Compose
+draw(PNG("Graphics\\example_route.png",16cm,16cm),a)
+=#

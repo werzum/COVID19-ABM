@@ -21,6 +21,14 @@ plot(workplacesize_distribution)
 size_classes = [1:7, 8:17, 18:33, 34:67, 68:167, 168:333, 334:667]
 size_probabilities = [0.10555815039701075, 0.30336291452592246, 0.1865950490425035, 0.1557683325548809, 0.13895375992526857, 0.06305464736104624, 0.046707146193367584]
 workplacesize_distribution = DiscreteNonParametric(size_classes,size_probabilities)
+#finally, generating the worksize distribution via a function+random
+using CurveFit
+ExpFit([10.0,100.0,200.0,300.0,500.0],[500.0,100.0,50.0,20.0,10.0])
+
+function exp_workplace(x)
+    return (2990.168x^-0.7758731)-x/10+rand(0:(2*x/10))
+end
+
 #saving a fig
 a = plot(workplacesize_distribution)
 savefig(a,"Graphics\\workplace_size_rayleigh.png")
