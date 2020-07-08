@@ -94,12 +94,10 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     #fill array with default agents of respective amount of agents with young/old age and gender
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     undef_vector = LightGraphs.SimpleGraphs.SimpleEdge{Int64}[]
-
-
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(false,age,wealth,0,0,undef_vector)
+        agent_properties[Int(x)] = agent_tuple(false,age,wealth,0,0,0,undef_vector)
     end
-undef
+
     #randomly set women and young/old inhabitants
     [agent.women = true for agent in agent_properties[1:women]]
     shuffle!(agent_properties)
@@ -144,6 +142,25 @@ undef
         for i in 1:hhhere
             #set #hhere agents to this node and increment the agent_index counter
             agent_properties[agent_index+i].household = value
+        end
+        agent_index = agent_index+hhhere
+    end
+
+    #adding friendgroup, same behavior, select random nodes
+    nodecount = Int(round(inhabitants/11))
+    nodes = rand(possible_nodes,nodecount)
+    #from sinus institut, get friend size groups
+    friend_distribution = Normal(11,3)
+    sample = Int.(round.(rand(friend_distribution,nodecount)))
+    while sum(sample) != inhabitants
+        sample = Int.(round.(rand(friend_distribution,nodecount)))
+    end
+    agent_index = 0
+    #fill the social groups up
+    for (index,value) in enumerate(nodes)
+        hhhere = sample[index]
+        for i in 1:hhhere
+            agent_properties[agent_index+i].socialgroup = value
         end
         agent_index = agent_index+hhhere
     end
@@ -195,8 +212,13 @@ undef
 
     #and, finally, compute add all agent properties to the model
     for agent in agent_properties
-        agent_route = a_star(model.space.graph,agent.household,agent.workplace)
-        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent_route)
+        #only compute route if agent has a workplace
+        if agent.workplace != 0
+            agent_route = a_star(model.space.graph,agent.household,agent.workplace)
+        else
+            agent_route = Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}[]
+        end
+        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent_route)
     end
     return
 end
@@ -282,6 +304,7 @@ mutable struct DemoAgent <: AbstractAgent
     wealth::Int16
     household::Int32
     workplace::Int32
+    socialgroup::Int32
     workplaceroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
 end
 
@@ -291,6 +314,7 @@ mutable struct agent_tuple
     wealth::Int16
     household::Int32
     workplace::Int32
+    socialgroup::Int32
     workplaceroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
 end
 
@@ -332,7 +356,5 @@ function setup(model)
 
     return model
 end
-
-workplace_arr = exp_workplace.(wealth_data)
-
-plot(workplace_arr)
+#workplace_arr = exp_workplace.(wealth_data)
+#plot(workplace_arr)
