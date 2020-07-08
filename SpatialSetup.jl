@@ -1,14 +1,9 @@
-using OpenStreetMapX, LightGraphs, GraphPlot, GraphRecipes
-using CSV, DataFrames
-using Agents, AgentsPlots
-using Statistics
+using OpenStreetMapX
+using LightGraphs
+using GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor
 using Distributed
 using DataFramesMeta
-using Luxor
-using StatsBase
-using Random
-using StatsBase
-using Distributions, StatsPlots
+using StatsBase, Distributions, Statistics
 
 function create_node_map()
     #get map data and its inbounds
@@ -46,7 +41,6 @@ function create_node_map()
     #graphplot(aachen_graph, markersize=2, x=LLA_Dict_longs, y=LLA_Dict_lats)
     #show the map to prove how cool and orderly it is
     #gplot(aachen_graph, LLA_Dict_longs, LLA_Dict_lats)
-
     #savegraph("Graphics\\aachen_graph.lgz", aachen_graph)
     aachen_graph = aachen_graph, LLA_Dict_longs, LLA_Dict_lats, bounds, aachen_schools, aachen_map
 
@@ -95,7 +89,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     undef_vector = LightGraphs.SimpleGraphs.SimpleEdge{Int64}[]
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(false,age,wealth,0,0,0,undef_vector)
+        agent_properties[Int(x)] = agent_tuple(false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector)
     end
 
     #randomly set women and young/old inhabitants
@@ -165,6 +159,25 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
         agent_index = agent_index+hhhere
     end
 
+    #adding distnant groups, representing sport and shopping behavior
+    nodecount = Int(round(inhabitants/20))
+    nodes = rand(possible_nodes,nodecount)
+    #from sinus institut, get friend size groups
+    distant_distribution = Normal(20,5)
+    sample = Int.(round.(rand(distant_distribution,nodecount)))
+    while sum(sample) != inhabitants
+        sample = Int.(round.(rand(distant_distribution,nodecount)))
+    end
+    agent_index = 0
+    #fill the distant groups
+    for (index,value) in enumerate(nodes)
+        hhhere = sample[index]
+        for i in 1:hhhere
+            agent_properties[agent_index+i].distantgroup = value
+        end
+        agent_index = agent_index+hhhere
+    end
+
     #get people in school age
     young_people = filter(x -> isbetween(5,x.age,18), agent_properties)
     #search the closest school and set it as their workplace
@@ -214,11 +227,13 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     for agent in agent_properties
         #only compute route if agent has a workplace
         if agent.workplace != 0
-            agent_route = a_star(model.space.graph,agent.household,agent.workplace)
+            agent_workplace_route = a_star(model.space.graph,agent.household,agent.workplace)
         else
-            agent_route = Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}[]
+            agent_workplace_route = Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}[]
         end
-        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent_route)
+        agent_social_route = a_star(model.space.graph,agent.household,agent.socialgroup)
+        agent_distant_route = a_star(model.space.graph,agent.household,agent.distantgroup)
+        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route)
     end
     return
 end
@@ -296,18 +311,6 @@ end
 
 isbetween(a, x, b) = a <= x <= b || b <= x <= a
 
-mutable struct DemoAgent <: AbstractAgent
-    id::Int
-    pos::Int
-    women::Bool
-    age::Int8
-    wealth::Int16
-    household::Int32
-    workplace::Int32
-    socialgroup::Int32
-    workplaceroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
-end
-
 mutable struct agent_tuple
     women::Bool
     age::Int16
@@ -315,14 +318,15 @@ mutable struct agent_tuple
     household::Int32
     workplace::Int32
     socialgroup::Int32
+    distantgroup::Int32
     workplaceroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
+    socialroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
+    distantroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
 end
 
-
-function setup(model)
+function setup()
     #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
     #TODO probably caused by linearization of LLA coordinates, how to fix this? Where should the point of reference be?
-    #TODO fix agent to workplace mapping so that richer agents preferredly work in smaller workplaces
     #TODO add arrays to keep track of the schools, homes, workplaces, so that we can set custom infection rates and so forth for them.
 
     #create the nodemap and rawdata demography map and set the bounds for it
@@ -330,7 +334,7 @@ function setup(model)
     r2 = @spawn create_demography_map()
     nodes,long,lat,bounds,schools,map_data = fetch(r1)
     rawdata = fetch(r2)
-
+    println("loaded raw data")
     #get the grid data within the boundaries of the node map
     working_grid = rawdata[(rawdata.X .> bounds.min_x) .& (rawdata.X .< bounds.max_x) .& (rawdata.Y .> bounds.min_y).& (rawdata.Y .< bounds.max_y),:]
 
@@ -339,8 +343,6 @@ function setup(model)
     correction_factor = nv(nodes)
 
     #set up the variables, structs etc.
-    inhabitants = women = age = below18 = over65 = wealth = 0
-    DemoAgent(id;women,age, wealth,household) = DemoAgent(id,women,age,wealth,household)
     space = GraphSpace(nodes)
     model = ABM(DemoAgent,space)
 
@@ -350,11 +352,14 @@ function setup(model)
 
     #divide the grid into groups so we can iterate over it and fill the map with agents
     working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=true)
-    @time @inbounds for group in working_grid
+    println("finished additional setup and beginning with agent generation")
+    @inbounds for group in working_grid
+        println("working at next group")
         fill_map(model,group,long,lat,correction_factor,schools,schoolrange)
     end
 
-    return model
+    return model,lat,long
 end
 #workplace_arr = exp_workplace.(wealth_data)
 #plot(workplace_arr)
+export setup

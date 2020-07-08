@@ -13,13 +13,17 @@ function draw_map(model,lat,long)
         b==0 ? ncolor[i]=RGBA(1.0, 1.0, 1.0, 0.6) : ncolor[i]=RGBA(0.0, 0.6, 0.6, 0.8)
         length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
     end
-    gplot(nodes, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
+    gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
 end
 
 function draw_route(model,lat,long)
     #draw random agent and get the route
     agent = random_agent(model)
     thisroute = agent.workplaceroute
+    while(length(thisroute)<10)
+        agent = random_agent(model)
+        thisroute = agent.workplaceroute
+    end
     #make array of normal edge colors
     edgecolors = [colorant"lightgray" for i in  1:ne(model.space.graph)]
     for i in thisroute
@@ -31,7 +35,7 @@ function draw_route(model,lat,long)
             #check for all edges if its equal (forward and backward) to the route edge, if so set color to yellow
             for (index,value) in enumerate(edges(model.space.graph))
                 if(value == edge1 || value == edge2 )
-                    edgecolors[index] = colorant"yellow"
+                    edgecolors[index] = colorant"red"
                     continue
                 end
             end
@@ -45,3 +49,5 @@ savefig(a,"Graphics\\example_route.png")
 using Compose
 draw(PNG("Graphics\\example_route.png",16cm,16cm),a)
 =#
+
+export draw_map,draw_route
