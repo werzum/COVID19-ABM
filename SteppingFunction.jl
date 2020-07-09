@@ -1,3 +1,26 @@
+function agent_week!(model, social_groups, distant_groups)
+    for i in 1:5
+        social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
+        distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
+        agent_day(model, day, social_active_group,distant_active_group)
+    end
+    for i in 1:2
+        social_active_group = rand(social_groups,Int.(round.(length(social_groups)/3)))
+        distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/3)))
+        step!(model, agent_step!)
+    end
+end
+
+function agent_day!(model,day)
+    #to work
+    step!(model, agent_step!)
+    #back home
+    step!(model, agent_step!)
+    #if social/distant
+    step!(model, agent_step!)
+    #and back home
+    step!(model, agent_step!)
+end
 
 function agent_step!(agent, model)
     move!(agent, model)
@@ -7,7 +30,9 @@ function agent_step!(agent, model)
 end
 
 function move!(agent, model)
-    move_agent!(agent,agent.workplace,model)
+    if agent.workplace != 0
+        move_agent!(agent,agent.workplace,model)
+
     #if he wants to move
     if rand()<0.005
         #get random coordinates

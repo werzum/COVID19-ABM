@@ -59,7 +59,7 @@ function create_demography_map()
     return rawdata
 end
 
-function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
+function fill_map(model,group,long, lat, correction_factor,schools,schoolrange,social_groups,distant_groups)
     nrow(group) < 4 && return
     #get the bounds and skip if the cell is empty
     top = maximum(group[:Y])
@@ -145,6 +145,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     #adding friendgroup, same behavior, select random nodes
     nodecount = Int(round(inhabitants/11))
     nodes = rand(possible_nodes,nodecount)
+    println("social nodes are $nodes")
     #from sinus institut, get friend size groups
     friend_distribution = Normal(11,3)
     sample = Int.(round.(rand(friend_distribution,nodecount)))
@@ -155,6 +156,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     #fill the social groups up
     for (index,value) in enumerate(nodes)
         hhhere = sample[index]
+        push!(social_groups,value)
         for i in 1:hhhere
             agent_properties[agent_index+i].socialgroup = value
         end
@@ -164,6 +166,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     #adding distnant groups, representing sport and shopping behavior
     nodecount = Int(round(inhabitants/20))
     nodes = rand(possible_nodes,nodecount)
+    println("distant nodes are $nodes")
     #from sinus institut, get friend size groups
     distant_distribution = Normal(20,5)
     sample = Int.(round.(rand(distant_distribution,nodecount)))
@@ -174,6 +177,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
     #fill the distant groups
     for (index,value) in enumerate(nodes)
         hhhere = sample[index]
+        push!(distant_groups,value)
         for i in 1:hhhere
             agent_properties[agent_index+i].distantgroup = value
         end
@@ -344,6 +348,8 @@ function setup()
     #set up the variables, structs etc.
     space = GraphSpace(nodes)
     model = ABM(DemoAgent,space)
+    social_groups = Vector{Int32}(undef,0)
+    distant_groups = Vector{Int32}(undef,0)
 
     #the nodeindices of the schools we add to the model
     schoolrange = [nv(model.space)+1:nv(model.space)+length(schools);]
@@ -353,11 +359,10 @@ function setup()
     working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=false)
     println("finished additional setup and beginning with agent generation")
     @inbounds for group in working_grid
-        fill_map(model,group,long,lat,correction_factor,schools,schoolrange)
+        fill_map(model,group,long,lat,correction_factor,schools,schoolrange, social_groups, distant_groups)
     end
 
-    return model,lat,long
+    return model,lat,long,social_groups,distant_groups
 end
-#workplace_arr = exp_workplace.(wealth_data)
-#plot(workplace_arr)
+
 export setup

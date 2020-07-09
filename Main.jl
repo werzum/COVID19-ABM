@@ -26,7 +26,7 @@ mutable struct DemoAgent <: AbstractAgent
 end
 
 #initialize the model and generate the map
-@time model,lat,long = setup()
+@time model,lat,long,social_groups,distant_groups = setup()
 
 params = Dict(
             :beta_det=> 1,
