@@ -17,7 +17,7 @@ function create_node_map()
     aachen_schools = filter(key -> haskey(aachen_schools_nodes,key.first),aachen_schools.nodes)
 
     #lat long of Aachen as reference frame
-    LLA_ref = LLA((bounds.max_y+bounds.min_y)/2, (bounds.max_x+bounds.min_x)/2, 0.0)
+    LLA_ref = LLA((bounds.max_y+bounds.min_y)/2, (bounds.max_x+bounds.min_x)/2, 266.0)
     #conversion to lat long coordinates
     LLA_Dict = OpenStreetMapX.LLA(aachen_map.nodes, LLA_ref)
     #filter the LLA_Dict so we have only the nodes we have in the graph
@@ -60,7 +60,7 @@ function create_demography_map()
 end
 
 function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
-    nrow(group) < 2 && return
+    nrow(group) < 4 && return
     #get the bounds and skip if the cell is empty
     top = maximum(group[:Y])
     bottom = minimum(group[:Y])
@@ -77,6 +77,8 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange)
 
     #get the number of inhabitants, women, old people etc for the current grid
     inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
+    inhabitants == 0 && return
+    println("working at next group")
     women = get_amount(inhabitants,group.Frauen_A)
     age = Int(round(mean(group.Alter_D)))
     below18 = get_amount(inhabitants,group.unter18_A)
@@ -325,9 +327,6 @@ mutable struct agent_tuple
 end
 
 function setup()
-    #TODO improve working_grid cell selection we also get edge cases, leads to some empty grid cells
-    #TODO probably caused by linearization of LLA coordinates, how to fix this? Where should the point of reference be?
-    #TODO add arrays to keep track of the schools, homes, workplaces, so that we can set custom infection rates and so forth for them.
 
     #create the nodemap and rawdata demography map and set the bounds for it
     r1 = @spawn create_node_map()
@@ -351,10 +350,9 @@ function setup()
     add_schools(schools,schoolrange,model,lat,long)
 
     #divide the grid into groups so we can iterate over it and fill the map with agents
-    working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=true)
+    working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=false)
     println("finished additional setup and beginning with agent generation")
     @inbounds for group in working_grid
-        println("working at next group")
         fill_map(model,group,long,lat,correction_factor,schools,schoolrange)
     end
 

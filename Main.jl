@@ -1,9 +1,8 @@
 using Agents, Random, DataFrames, LightGraphs
 using CSV
 using Plots
-using LinearAlgebra:diagind
-using AgentsPlots
-using Images
+
+#TODO add arrays to keep track of the schools, homes, workplaces, so that we can set custom infection rates and so forth for them.
 
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
