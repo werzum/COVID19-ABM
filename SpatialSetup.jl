@@ -48,18 +48,15 @@ function create_node_map()
 end
 
 function create_demography_map()
-
     rawdata = CSV.read("SourceData\\zensus.csv")
-
     #make sure properties are symbols
     colsymbols = propertynames(rawdata)
     rename!(rawdata,colsymbols)
-
     #@time plot(rawdata.X,rawdata.Y)
     return rawdata
 end
 
-function fill_map(model,group,long, lat, correction_factor,schools,schoolrange,social_groups,distant_groups)
+function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, workplacedict, social_groups,distant_groups)
     nrow(group) < 4 && return
     #get the bounds and skip if the cell is empty
     top = maximum(group[:Y])
@@ -78,7 +75,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange,s
     #get the number of inhabitants, women, old people etc for the current grid
     inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
     inhabitants == 0 && return
-    println("working at next group")
+    println("working at next group with $inhabitants inhabitants")
     women = get_amount(inhabitants,group.Frauen_A)
     age = Int(round(mean(group.Alter_D)))
     below18 = get_amount(inhabitants,group.unter18_A)
@@ -145,7 +142,6 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange,s
     #adding friendgroup, same behavior, select random nodes
     nodecount = Int(round(inhabitants/11))
     nodes = rand(possible_nodes,nodecount)
-    println("social nodes are $nodes")
     #from sinus institut, get friend size groups
     friend_distribution = Normal(11,3)
     sample = Int.(round.(rand(friend_distribution,nodecount)))
@@ -166,7 +162,6 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange,s
     #adding distnant groups, representing sport and shopping behavior
     nodecount = Int(round(inhabitants/20))
     nodes = rand(possible_nodes,nodecount)
-    println("distant nodes are $nodes")
     #from sinus institut, get friend size groups
     distant_distribution = Normal(20,5)
     sample = Int.(round.(rand(distant_distribution,nodecount)))
@@ -198,35 +193,30 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange,s
         agent.workplace = schoolrange[rand(school_nodes)]
     end
 
-    #get people in working age
-    middle_people = filter(x -> isbetween(18,x.age,65), agent_properties)
-    #get a distribution of workplacesizes, draw middle_people/average workplace size workplaces and redraw so that it fits the number of middle_people
-    #workplacesize_distribution from paper (Stottrop) that details average sqm/bureau, which is divided by 15 (and rounded) to obtain expected max number of workplaces
-    #capped the workplacesize at 667 since more is not realistic and kept the fixed rates so they dont have to be recomputed
-    workplacesize_distribution = Rayleigh(96.31905979491185)
-    #draw randomly from the distribution
-    workplacesizes = Int.(round.(rand(workplacesize_distribution,Int(round(length(middle_people)/mean(workplacesize_distribution))))))
-    #generate one workplace where all people go if it is so small that the rounding sets #workplaces to zero
-    if length(workplacesizes) == 0
-        push!(workplacesizes,length(middle_people))
-    end
-    #redraw workplaces until it fits the #people
-    workplacerange = [nv(model.space)+1:nv(model.space)+length(workplacesizes);]
-    while sum(workplacesizes) != length(middle_people)
-        workplacesizes = Int.(round.(rand(workplacesize_distribution,Int(round(length(middle_people)/mean(workplacesize_distribution))))))
-    end
-    #add workplaces to the graph
-    add_workplaces(workplacesizes,model,lat,long,possible_nodes,workplacerange)
     #and distribute the agents to the workspaces
     middle_people = filter(x -> isbetween(18,x.age,65), agent_properties)
-    agent_index = 0
-    #iterate through the workplaces, and per workspace add n agents from middle_people to it by setting it as their workspace.
-    for (index,value) in enumerate(workplacerange)
-        workplace = workplacesizes[index]
-        for i in 1:workplace
-            middle_people[agent_index+i].workplace = value
+    for agent in middle_people
+        search_dist = 0.005
+        workplace_keys = collect(Base.keys(workplacedict))
+        workplace_values = collect(values(workplacedict))
+        #deduce the workplace size preference of this agent
+        max_workplace_size = round(exp_workplace(agent.wealth))
+        #check if the workplace is within range and not yet filled beyond individual preference
+        workplace_nodes = findall(x -> abs(x[3]-lat[agent.household])<search_dist && abs(x[4]-long[agent.household])<search_dist && x[2]<max_workplace_size,[workplace_values...] )
+        #if no nodes are within range, expand it step by step
+        while length(workplace_nodes) == 0
+            search_dist*=2
+            workplace_nodes = findall(x -> abs(x[3]-lat[agent.household])<search_dist && abs(x[4]-long[agent.household])<search_dist && x[2]<max_workplace_size,[workplace_values...] )
+            #if range gets to big, add agent against his preferences to node
+            if search_dist > 0.1
+                workplace_nodes = findall(x -> abs(x[3]-lat[agent.household])<search_dist && abs(x[4]-long[agent.household])<search_dist,[workplace_values...] )
+            end
         end
-        agent_index = agent_index+workplace
+        #set one of the possible nodes as workplace for this agent
+        selected_workspace = workplace_keys[rand(workplace_nodes)]
+        agent.workplace = selected_workspace
+        #and increment the counter for this workplace
+        workplacedict[selected_workspace][2]+= 1
     end
 
     #and, finally, compute add all agent properties to the model
@@ -247,22 +237,54 @@ end
 
 
 #helper functions
+
+#counts the number of inhabitants so its available externally
+function count_inhabitants(working_grid,lat, long)
+    inhabitants = 0
+    for group in working_grid
+        nrow(group) < 4 && continue
+        #add the number of people eligibile for work to the inhabitants
+        inhabitants_here = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
+        below18 = get_amount(inhabitants_here,group.unter18_A)
+        over65 = get_amount(inhabitants_here,group.ab65_A)
+        inhabitants+= (inhabitants_here-below18)-over65
+    end
+    return inhabitants
+end
+
 function exp_workplace(x)
     return (2990.168x^-0.7758731)-x/10+rand(0:(2*x/10))
 end
 
-function add_workplaces(workplacesizes,model,lat,long,possible_nodes,workplacerange)
+function add_workplaces(model,lat,long,working_population)
+    workplacesize_distribution = Rayleigh(96.31905979491185)
+    #draw (#inhabitants/avg number of workplaces) workplaces from the distribution
+    workplacesizes = Int.(round.(rand(workplacesize_distribution,Int(round(working_population/mean(workplacesize_distribution))))))
+    sum_wp_size = sum(workplacesizes)
+    #remove too big draws from workplacesizes
+    while sum(workplacesizes) >= working_population
+        pop!(workplacesizes)
+    end
+    #and fill the last slow with a workplace in the fitting size
+    push!(workplacesizes,(working_population-sum(workplacesizes)))
+    workplacerange = [nv(model.space)+1:nv(model.space)+length(workplacesizes);]
+    random_nodes = rand(vertices(model.space.graph),length(workplacesizes))
+    #add workplaces to the graph
     add_nodes_to_model(model,workplacesizes)
-    #then generate an edge and locate them close to their parent node
+    #initialize a dict of node => (max workplaces, currently used workplaces)
+    workplacedict = Dict(0 => [0,0,0.0,0.0])
     index = 1
     for i in 1:length(workplacesizes)
         #set the coordinate of the school at a random point in the map, connect to it
-        adjacent_node = rand(possible_nodes)
+        adjacent_node = random_nodes[i]
         add_edge!(model.space.graph, adjacent_node, workplacerange[i])
         #and set the lat,longs with a little offset to that node
+        println("node is $adjacent_node")
         push!(lat,lat[adjacent_node]+0.0002)
         push!(long,long[adjacent_node]+0.0002)
+        workplacedict[workplacerange[i]] = [workplacesizes[i],0,lat[adjacent_node]+0.0002,long[adjacent_node]+0.0002]
     end
+    return workplacedict
 end
 
 
@@ -357,9 +379,13 @@ function setup()
 
     #divide the grid into groups so we can iterate over it and fill the map with agents
     working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=false)
+    #add workspaces to the map
+    working_population = count_inhabitants(working_grid, lat, long)
+    workplacedict = add_workplaces(model, lat, long, working_population)
     println("finished additional setup and beginning with agent generation")
+
     @inbounds for group in working_grid
-        fill_map(model,group,long,lat,correction_factor,schools,schoolrange, social_groups, distant_groups)
+        fill_map(model,group,long,lat,correction_factor,schools,schoolrange, workplacedict, social_groups, distant_groups)
     end
 
     return model,lat,long,social_groups,distant_groups
