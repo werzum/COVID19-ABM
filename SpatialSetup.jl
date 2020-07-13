@@ -1,4 +1,3 @@
-using OpenStreetMapX
 using LightGraphs
 using GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor
 using Distributed
@@ -88,7 +87,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     undef_vector = LightGraphs.SimpleGraphs.SimpleEdge{Int64}[]
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector)
+        agent_properties[Int(x)] = agent_tuple(:S,false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector)
     end
 
     #randomly set women and young/old inhabitants
@@ -229,7 +228,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
         end
         agent_social_route = a_star(model.space.graph,agent.household,agent.socialgroup)
         agent_distant_route = a_star(model.space.graph,agent.household,agent.distantgroup)
-        add_agent!(agent.household, model, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route)
+        add_agent!(agent.household, model, agent.health_status, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route)
     end
     return
 end
@@ -239,7 +238,7 @@ end
 #helper functions
 
 #counts the number of inhabitants so its available externally
-function count_inhabitants(working_grid,lat, long)
+function count_inhabitants(working_grid,lat, long, correction_factor)
     inhabitants = 0
     for group in working_grid
         nrow(group) < 4 && continue
@@ -340,6 +339,7 @@ end
 isbetween(a, x, b) = a <= x <= b || b <= x <= a
 
 mutable struct agent_tuple
+    health_status::Symbol
     women::Bool
     age::Int16
     wealth::Int16
@@ -352,7 +352,7 @@ mutable struct agent_tuple
     distantroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
 end
 
-function setup()
+function setup(params)
 
     #create the nodemap and rawdata demography map and set the bounds for it
     r1 = @spawn create_node_map()
@@ -369,7 +369,7 @@ function setup()
 
     #set up the variables, structs etc.
     space = GraphSpace(nodes)
-    model = ABM(DemoAgent,space)
+    model = ABM(DemoAgent,space; properties=params)
     social_groups = Vector{Int32}(undef,0)
     distant_groups = Vector{Int32}(undef,0)
 
@@ -380,7 +380,7 @@ function setup()
     #divide the grid into groups so we can iterate over it and fill the map with agents
     working_grid = groupby(working_grid,:DE_Gitter_ETRS89_LAEA_1km_ID_1k; sort=false)
     #add workspaces to the map
-    working_population = count_inhabitants(working_grid, lat, long)
+    working_population = count_inhabitants(working_grid, lat, long, correction_factor)
     workplacedict = add_workplaces(model, lat, long, working_population)
     println("finished additional setup and beginning with agent generation")
 
