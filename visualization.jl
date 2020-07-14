@@ -16,17 +16,9 @@ function draw_map(model,lat,long)
     gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
 end
 
-function draw_route(model,lat,long)
-    #draw random agent and get the route
-    agent = random_agent(model)
-    thisroute = agent.workplaceroute
-    while(length(thisroute)<10)
-        agent = random_agent(model)
-        thisroute = agent.workplaceroute
-    end
-    #make array of normal edge colors
-    edgecolors = [colorant"lightgray" for i in  1:ne(model.space.graph)]
-    for i in thisroute
+#paint the edges of edgecolor red for all edges in the route
+function generate_edgecolors(route, edgecolors)
+    for i in route
         start =  src(i)
         fin = dst(i)
         if has_edge(model.space.graph,start,fin) || has_edge(model.space.graph,fin,start)
@@ -41,13 +33,68 @@ function draw_route(model,lat,long)
             end
         end
     end
-    gplot(model.space.graph, long, lat, edgestrokec=edgecolors)
+    return edgecolors
 end
 
+function draw_route(model,lat,long)
+    #draw random agent and get the route
+    agent = random_agent(model)
+    workplaceroute = agent.workplaceroute
+    socialroute = agent.socialroute
+    distantroute = agent.distantroute
+    while(length(workplaceroute)<10)
+        agent = random_agent(model)
+        thisroute = agent.workplaceroute
+    end
+    #make array of normal edge colors
+    edgecolors = [colorant"lightgray" for i in  1:ne(model.space.graph)]
+    #and add all routes to edgecolors
+    edgecolors = generate_edgecolors(workplaceroute, edgecolors)
+    edgecolors = generate_edgecolors(socialroute, edgecolors)
+    edgecolors = generate_edgecolors(distantroute, edgecolors)
+    #set the home as yellow point in the map
+    nodecolors = [colorant"turquoise" for i in  1:ne(model.space.graph)]
+    nodecolors[agent.household] = colorant"yellow"
+    gplot(model.space.graph, long, lat, edgestrokec=edgecolors, nodefillc=nodecolors)
+end
+
+function create_chart(steps)
+    N =  nagents(model)# Total initial population
+    data = agent_week!(model,social_groups,distant_groups,steps)
+    #x = data.step
+    x = eachrow(data)
+    p = Plots.plot(x, log10.(data[:, Symbol("infected_health_status")]), label = "infected")
+    plot!(p, x, log10.(data[:, Symbol("recovered_health_status")]), label = "recovered")
+    plot!(p, x, log10.(data[:, Symbol("susceptible_health_status")]), label = "susceptible")
+    dead = log10.(N .- data[:, Symbol("length_health_status")])
+    #plot!(p, x, dead, label = "dead")
+    xlabel!(p, "steps")
+    ylabel!(p, "log( count )")
+    p
+end
+
+function create_gif()
+    properties = [:status, :pos]
+    #plot the ith step of the simulation
+    anim = @animate for i ∈ 1:50
+        data = step!(model, agent_step!, 1, properties)
+        p = plot2D(data, :status, nodesize=3)
+        title!(p, "Day $(i)")
+    end
+    gif(anim, "Graphics\\covid_evolution.gif", fps = 3);
+end
+
+export draw_map,draw_route,create_chart, create_gif
 #=savefig examples
 savefig(a,"Graphics\\example_route.png")
 using Compose
 draw(PNG("Graphics\\example_route.png",16cm,16cm),a)
 =#
+@df b plot(cols())
 
-export draw_map,draw_route
+@time b = agent_week!(model, social_groups, distant_groups,6)
+
+for i in 1:100
+    agent = random_agent(model)
+    agent.health_status = :E
+end

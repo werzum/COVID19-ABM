@@ -5,6 +5,7 @@ using Plots
 #TODO add arrays to keep track of the schools, homes, workplaces, so that we can set custom infection rates and so forth for them.
 #TODO map is unweighted so far, could add wheights but then have to
 #TODO could clear the warnings about changed uses of filter, csv read and filter
+#TODO incomplete routes for some? -> nah, probabbly children or elderly
 
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
@@ -16,6 +17,7 @@ mutable struct DemoAgent <: AbstractAgent
     id::Int
     pos::Int
     health_status::Symbol #reflects the SIR extended states (Susceptible, Exposed, Infected, InfectedWitoutSymptpms, NotQuarantined, Quarantined, Dead, Immune)
+    days_infected::Int16
     women::Bool
     age::Int8
     wealth::Int16
