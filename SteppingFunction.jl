@@ -1,20 +1,25 @@
-function agent_week!(model, social_groups, distant_groups)
-    for i in 1:5
-        social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
-        distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
-        infected_edges = Vector{Int32}(undef,0)
-        println("executing agent day")
-        agent_day!(model, social_active_group, distant_active_group)
+function agent_week!(model, social_groups, distant_groups,steps)
+    agent_data = DataFrame(step=Int64[],infected_health_status=Int64[],recovered_health_status=Int64[],susceptible_health_status=Int64[],length_health_status=Int64[])
+    for step in steps
+        for i in 1:5
+            social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
+            distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
+            infected_edges = Vector{Int32}(undef,0)
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges)
+            append!(agent_data,day_data)
+        end
+        for i in 1:2
+            social_active_group = rand(social_groups,Int.(round.(length(social_groups)/3)))
+            distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/3)))
+            infected_edges = Vector{Int32}(undef,0)
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges)
+            append!(agent_data,day_data)
+        end
     end
-    for i in 1:2
-        social_active_group = rand(social_groups,Int.(round.(length(social_groups)/3)))
-        distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/3)))
-        infected_edges = Vector{Int32}(undef,0)
-        agent_day!(model, social_active_group, distant_active_group)
-    end
+    return agent_data
 end
 
-function agent_day!(model, social_active_group, distant_active_group)
+function agent_day!(model, social_active_group, distant_active_group,infected_edges)
 
     #TODO add difference between work and social activites
 
@@ -22,8 +27,8 @@ function agent_day!(model, social_active_group, distant_active_group)
     function move_step!(agent, model)
         #if agent is infected, add edges on his way to the array of infected edges
         if (agent.health_status == :I)
-            push!(infected_edges, collect(dst.(ag_route)))
-            push!(infected_edges, src(ag_route[1]))
+            append!(infected_edges, collect(dst.(agent.workplaceroute)))
+            append!(infected_edges, collect(src.(agent.workplaceroute)))
         end
         #then go to workplace, social group, or home depending on the time of day
         if time_of_day == :work && agent.workplace != 0
@@ -70,8 +75,8 @@ function agent_day!(model, social_active_group, distant_active_group)
         while n > 0 && t < timeout
             target = id2agent(rand(node_contents), model)
             #TODO add the product of individual protection and and target protection - keeping it real simple for now
-            if infected.health_status == :S
-                infected.health_status = :I
+            if target.health_status == :S
+                target.health_status = :I
                 n -= 1
             end
             t +=1
@@ -108,27 +113,34 @@ function agent_day!(model, social_active_group, distant_active_group)
         end
     end
 
-    #to work
-    time_of_day = :work
-    println("move to work")
-    step!(model, move_step!)
-    step!(model, infect_step!)
+    #data collection functions
+    infected(x) = count(in(i,(:E,:I,:IwS,:Q,:NQ)) for i in x)
+    recovered(x) = count(in(i,(:M,:D)) for i in x)
+    susceptible(x) = count(i == :S for i in x)
+    data_to_collect = [(:health_status,f) for f in (infected, recovered, susceptible, length)]
 
-    println("move to back")
+    #run the model - agents go to work, collect data
+    time_of_day = :work
+    data1, _ = run!(model, move_step!,1; adata = data_to_collect)
+    data2, _ = run!(model, infect_step!,1; adata = data_to_collect)
     #back home
     time_of_day = :back
-    step!(model, move_step!)
-    step!(model, infect_step!)
+    data3, _ = run!(model, move_step!,1; adata = data_to_collect)
+    data4, _ = run!(model, infect_step!,1; adata = data_to_collect)
 
     #if social/distant
     time_of_day = :social
-    step!(model, move_step!)
-    step!(model, infect_step!)
+    data5, _ = run!(model, move_step!,1; adata = data_to_collect)
+    data6, _ = run!(model, infect_step!,1; adata = data_to_collect)
 
     #and back home
     time_of_day = :back
-    step!(model, move_step!)
-    step!(model, infect_step!)
+    data7, _ = run!(model, move_step!,1; adata = data_to_collect)
+    data8, _ = run!(model, infect_step!,1; adata = data_to_collect)
+
+    #combine dfs and return them
+    data = vcat(data1, data2, data3, data4, data5, data6, data7, data8)
+    return data
 end
 
 export agent_step!
