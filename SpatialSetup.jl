@@ -88,7 +88,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     undef_vector = LightGraphs.SimpleGraphs.SimpleEdge{Int64}[]
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(:S,0,false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector)
+        agent_properties[Int(x)] = agent_tuple(:S,0,0,0,false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector)
     end
 
     #randomly set women and young/old inhabitants
@@ -219,6 +219,8 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
         workplacedict[selected_workspace][2]+= 1
     end
 
+    compute_attitudes(agent_properties)
+
     #and, finally, compute add all agent properties to the model
     for agent in agent_properties
         #only compute route if agent has a workplace
@@ -229,7 +231,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
         end
         agent_social_route = a_star(model.space.graph,agent.household,agent.socialgroup)
         agent_distant_route = a_star(model.space.graph,agent.household,agent.distantgroup)
-        add_agent!(agent.household, model, agent.health_status, agent.days_infected, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route)
+        add_agent!(agent.household, model, agent.health_status, agent.days_infected, agent.attitude, agent.behavior, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route)
     end
     return
 end
@@ -237,6 +239,27 @@ end
 
 
 #helper functions
+
+#generates a distribution of base attitudes towards protective behavior
+function compute_attitudes(agent_properties)
+    #assign random attitude values to the agent attributes
+    trust_distribution = Normal(55.53191489361702,16.542467674404413)
+    [agent.attitude = Int.(round.(rand(trust_distribution))) for agent in agent_properties]
+    #manipulate the attitude according to demographic factors
+    for agent in agent_properties
+        #women have more trust than men
+        if agent.women
+            agent.attitude = agent.attitude+rand(1:1:10)
+        else
+            agent.attitude = agent.attitude-rand(1:1:10)
+        end
+        #change attitude according to age
+        if agent.age>20
+            #set the baseline at average age 40, older people get a penalty on attitude, younger a bonus
+            agent.attitude = agent.attitude + Int(round(10-(agent.age/4)))
+        end
+    end
+end
 
 #counts the number of inhabitants so its available externally
 function count_inhabitants(working_grid,lat, long, correction_factor)
@@ -279,7 +302,6 @@ function add_workplaces(model,lat,long,working_population)
         adjacent_node = random_nodes[i]
         add_edge!(model.space.graph, adjacent_node, workplacerange[i])
         #and set the lat,longs with a little offset to that node
-        println("node is $adjacent_node")
         push!(lat,lat[adjacent_node]+0.0002)
         push!(long,long[adjacent_node]+0.0002)
         workplacedict[workplacerange[i]] = [workplacesizes[i],0,lat[adjacent_node]+0.0002,long[adjacent_node]+0.0002]
@@ -342,6 +364,8 @@ isbetween(a, x, b) = a <= x <= b || b <= x <= a
 mutable struct agent_tuple
     health_status::Symbol
     days_infected::Int8
+    attitude::Int16
+    behavior::Int16
     women::Bool
     age::Int16
     wealth::Int16

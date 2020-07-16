@@ -32,6 +32,13 @@ ExpFit([10.0,100.0,200.0,300.0,500.0],[500.0,100.0,50.0,20.0,10.0])
 function exp_workplace(x)
     return (2990.168x^-0.7758731)-x/10+rand(0:(2*x/10))
 end
+
+#trust in health system distrivution
+strenght_trust=[20,40,3,4]
+probability = [0.17,0.46,0.24,0.07]
+range = vcat([20 for i in 1:17],[40 for i in 1:46],[60 for i in 1:24],[80 for i in 1:7])
+trust_distribution = fit(Gamma,range)#
+plot(trust_distribution)
 a = histogram(workplace_arr)
 savefig(a,"Graphics\\histogram_workplace_distribution.png")
 #saving a fig

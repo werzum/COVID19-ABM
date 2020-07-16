@@ -41,11 +41,15 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     end
 
     function infect_step!(agent, model)
+        behavior!(agent,model)
         transmit!(agent,model)
         update!(agent,model)
         #add somewhere the possibility to become infected by travelling the same edges - not exactly transmit, maybe rather update
         recover_or_die!(agent,model)
     end
+
+    function behavior!(agent, model)
+        
 
     function transmit!(agent, model)
         #skip transmission for non-sick agents
