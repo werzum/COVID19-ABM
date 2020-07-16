@@ -18,6 +18,8 @@ mutable struct DemoAgent <: AbstractAgent
     pos::Int
     health_status::Symbol #reflects the SIR extended states (Susceptible, Exposed, Infected, InfectedWitoutSymptpms, NotQuarantined, Quarantined, Dead, Immune)
     days_infected::Int16
+    attitude::Int16
+    behavior::Int16
     women::Bool
     age::Int8
     wealth::Int16

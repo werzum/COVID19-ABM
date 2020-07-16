@@ -89,12 +89,14 @@ export draw_map,draw_route,create_chart, create_gif
 savefig(a,"Graphics\\example_route.png")
 using Compose
 draw(PNG("Graphics\\example_route.png",16cm,16cm),a)
-=#
-@df b plot(cols())
-
-@time b = agent_week!(model, social_groups, distant_groups,6)
-
-for i in 1:100
-    agent = random_agent(model)
-    agent.health_status = :E
-end
+# =#
+# @df b plot(cols())
+#
+# @time b = agent_week!(model, social_groups, distant_groups,6)
+#
+# for i in 1:100
+#     agent = random_agent(model)
+#     agent.health_status = :E
+# end
+#
+# draw_route(model,lat,long)
