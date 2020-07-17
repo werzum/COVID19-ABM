@@ -11,6 +11,7 @@ include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
 include("Visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long)
 #include("model_initiation.jl") #exports model_initiation
+include("UtilityFunctions.jl")# exports add_infected(number),reset_infected(model)
 
 #agent and params setup
 mutable struct DemoAgent <: AbstractAgent
@@ -36,7 +37,7 @@ parameters = Dict(
             :beta_undet=> 3,
             :infection_period=> 10,
             :infected_now=> 0,
-            :infected_cases=>0,
+            :infected_reported=>0,
             :reinfection_probability=> 0.01,
             :detection_time=> 6,
             :death_rate=> 0.02)
