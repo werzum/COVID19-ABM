@@ -7,8 +7,10 @@ function agent_week!(model, social_groups, distant_groups,steps)
             social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
             distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
             infected_edges = Vector{Int32}(undef,0)
-            #run the model
+            #to avoid costly recomputation in behavior, we collect all agents once and then use it in behavior
             all_agents = collect(allagents(model))
+            println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
+            #run the model
             day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
             #update the count of infected now and reported
             infected_count = sum([in(agent.health_status, (:E,:I,:IwS,:NQ)) for agent in  all_agents])
@@ -16,9 +18,8 @@ function agent_week!(model, social_groups, distant_groups,steps)
             model.infected_now = infected_count
             #delay the reported infections by seven days
             length(infected_timeline)<7 ? access_index=1 : access_index=length(infected_timeline)-6
-            #change this to infected_reported later
-            model.infected_cases = infected_timeline[access_index]
-            println("infected_count is $infected_count and reported are $(model.infected_cases)")
+            model.infected_reported = infected_timeline[access_index]
+            println("infected_count is $infected_count and reported are $(model.infected_reported)")
             #and add the data to the dataframe
             append!(agent_data,day_data)
         end
@@ -28,13 +29,14 @@ function agent_week!(model, social_groups, distant_groups,steps)
             distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/3)))
             infected_edges = Vector{Int32}(undef,0)
             all_agents = collect(allagents(model))
+            println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
             day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
             infected_count = sum([in(agent.health_status, (:E,:I,:IwS,:NQ)) for agent in  all_agents])
             push!(infected_timeline,infected_count)
             model.infected_now = infected_count
             length(infected_timeline)<7  ? access_index=1 : access_index=length(infected_timeline)-6
-            model.infected_cases = infected_timeline[access_index]
-            println("infected_count is $infected_count and reported are $(model.infected_cases)")
+            model.infected_reported = infected_timeline[access_index]
+            println("infected_count is $infected_count and reported are $(model.infected_reported)")
             append!(agent_data,day_data)
         end
     end
@@ -49,6 +51,10 @@ end
 function global_infection_threat(x)
     #taken from covid cases and threat
     return 0.00007614213*x + 0.6517766
+end
+
+function personal_infection_threat(x)
+    return 8784.045 + (80.04735 - 8784.045)/(1 + (x/34517710000)^0.3102068)
 end
 
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
@@ -90,13 +96,18 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
         #get personal environment infected and compute a threat value
         #get #infected within agents environment
-        number_acquaintances_infected = length(filter(x -> in(x.health_status, (:E,:I,:IwS,:NQ)) && (x.household == agent.household || x.workplace == agent.workplace || x.socialgroup == agent.socialgroup || x.distantgroup == agent.distantgroup), all_agents))
+        acquaintances_infected = length(filter(x -> in(x.health_status, (:E,:I,:IwS,:NQ)) && (x.household == agent.household || x.workplace == agent.workplace || x.socialgroup == agent.socialgroup || x.distantgroup == agent.distantgroup), all_agents))
+        personal_environment_threat = personal_infection_threat(acquaintances_infected)
+        #println("acqu infected $number_acquaintances_infected")
         #add these linearly*0.1 to the model
         #threat is delayed as #cases vs fear shows, fear shows variation of 20 percent
-        #global_threat = global_infection_threat(model.delayed_numbers)
-        #for agent in allagents(model)
-
-        #how to implement temporal decay?
+        global_threat = global_infection_threat(model.infected_reported)
+        overall_threat = personal_environment_threat*global_threat
+        #agent behavior is computed as norm + attitude + decay(threat)
+        #TODO threat is not time-based as of now, need to adjust that.
+        println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior and threat $overall_threat")
+        agent.behavior = Int16(round(mean([mean_behavior,attitude])*threat_decay(overall_threat)))
+        #println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior and threat $(threat_decay(mean([number_acquaintances_infected,global_threat])))")
     end
 
     function transmit!(agent, model)
@@ -201,7 +212,8 @@ export agent_step!
 
 agent_week!(model, social_groups, distant_groups,3)
 
-for i in 1:100
-    agent = random_agent(model)
-    agent.health_status = :I
-end
+# for i in 1:100
+#     agent = random_agent(model)
+#     agent.health_status = :I
+# end
+#
