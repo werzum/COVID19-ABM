@@ -1,25 +1,57 @@
 function agent_week!(model, social_groups, distant_groups,steps)
     agent_data = DataFrame(step=Int64[],infected_health_status=Int64[],recovered_health_status=Int64[],susceptible_health_status=Int64[],length_health_status=Int64[])
+    infected_timeline = Vector{Int16}(undef,0)
     for step in steps
         for i in 1:5
+            #select social&distant active groups randomly
             social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
             distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
             infected_edges = Vector{Int32}(undef,0)
-            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges)
+            #run the model
+            all_agents = collect(allagents(model))
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
+            #update the count of infected now and reported
+            infected_count = sum([in(agent.health_status, (:E,:I,:IwS,:NQ)) for agent in  all_agents])
+            push!(infected_timeline,infected_count)
+            model.infected_now = infected_count
+            #delay the reported infections by seven days
+            length(infected_timeline)<7 ? access_index=1 : access_index=length(infected_timeline)-6
+            #change this to infected_reported later
+            model.infected_cases = infected_timeline[access_index]
+            println("infected_count is $infected_count and reported are $(model.infected_cases)")
+            #and add the data to the dataframe
             append!(agent_data,day_data)
         end
+        #same procedure for the weekend, but bigger social active/distant groups
         for i in 1:2
             social_active_group = rand(social_groups,Int.(round.(length(social_groups)/3)))
             distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/3)))
             infected_edges = Vector{Int32}(undef,0)
-            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges)
+            all_agents = collect(allagents(model))
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
+            infected_count = sum([in(agent.health_status, (:E,:I,:IwS,:NQ)) for agent in  all_agents])
+            push!(infected_timeline,infected_count)
+            model.infected_now = infected_count
+            length(infected_timeline)<7  ? access_index=1 : access_index=length(infected_timeline)-6
+            model.infected_cases = infected_timeline[access_index]
+            println("infected_count is $infected_count and reported are $(model.infected_cases)")
             append!(agent_data,day_data)
         end
     end
     return agent_data
 end
 
-function agent_day!(model, social_active_group, distant_active_group,infected_edges)
+function threat_decay(x)
+    #fitted to datapoints of statista "disziplin lässt nach" curve
+    return 0.7960317 + 0.03615835*x - 0.00103458*x^2 + 0.000007423604*x^3
+end
+
+function global_infection_threat(x)
+    #taken from covid cases and threat
+    return 0.00007614213*x + 0.6517766
+end
+
+function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
 
     #TODO add difference between work and social activites
 
@@ -49,7 +81,23 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     end
 
     function behavior!(agent, model)
-        
+        #get behavior of others in same nodes
+        node_agents = get_node_agents(agent.pos,model)
+        mean_behavior = mean([agent.behavior for agent in node_agents])
+
+        #get the agents attitude
+        attitude = agent.attitude
+
+        #get personal environment infected and compute a threat value
+        #get #infected within agents environment
+        number_acquaintances_infected = length(filter(x -> in(x.health_status, (:E,:I,:IwS,:NQ)) && (x.household == agent.household || x.workplace == agent.workplace || x.socialgroup == agent.socialgroup || x.distantgroup == agent.distantgroup), all_agents))
+        #add these linearly*0.1 to the model
+        #threat is delayed as #cases vs fear shows, fear shows variation of 20 percent
+        #global_threat = global_infection_threat(model.delayed_numbers)
+        #for agent in allagents(model)
+
+        #how to implement temporal decay?
+    end
 
     function transmit!(agent, model)
         #skip transmission for non-sick agents
@@ -125,8 +173,8 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
     #run the model - agents go to work, collect data
     time_of_day = :work
-    data1, _ = run!(model, move_step!,1; adata = data_to_collect)
-    data2, _ = run!(model, infect_step!,1; adata = data_to_collect)
+    data1, _ = run!(model, move_step!, 1; adata = data_to_collect)
+    data2, _ = run!(model, infect_step!, 1; adata = data_to_collect)
     #back home
     time_of_day = :back
     data3, _ = run!(model, move_step!,1; adata = data_to_collect)
@@ -148,3 +196,12 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 end
 
 export agent_step!
+
+
+
+agent_week!(model, social_groups, distant_groups,3)
+
+for i in 1:100
+    agent = random_agent(model)
+    agent.health_status = :I
+end

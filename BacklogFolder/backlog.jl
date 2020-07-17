@@ -36,9 +36,10 @@ end
 #trust in health system distrivution
 strenght_trust=[20,40,3,4]
 probability = [0.17,0.46,0.24,0.07]
-range = vcat([20 for i in 1:17],[40 for i in 1:46],[60 for i in 1:24],[80 for i in 1:7])
-trust_distribution = fit(Gamma,range)#
+range = vcat([80 for i in 1:17],[60 for i in 1:46],[40 for i in 1:24],[20 for i in 1:7])
+trust_distribution = fit(Normal,range)#
 plot(trust_distribution)
+mean(trust_distribution)
 a = histogram(workplace_arr)
 savefig(a,"Graphics\\histogram_workplace_distribution.png")
 #saving a fig
