@@ -2,12 +2,18 @@ function agent_week!(model, social_groups, distant_groups,steps)
     agent_data = DataFrame(step=Int64[],infected_health_status=Int64[],recovered_health_status=Int64[],susceptible_health_status=Int64[],length_health_status=Int64[])
     infected_timeline = Vector{Int16}(undef,0)
     infected_timeline_growth = Vector{Int16}(undef,0)
-    for step in steps
-        for i in 1:5
+    for step in 1:steps
+        println("step $step")
+        for i in 1:7
             model.days_passed+=1
-            #select social&distant active groups randomly
-            social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
-            distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
+            #select social&distant active groups randomly, more agents are social active on the weekend
+            if i < 6
+                social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
+                distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
+            else
+                social_active_group = rand(social_groups,Int.(round.(length(social_groups)/3)))
+                distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/3)))
+            end
             infected_edges = Vector{Int32}(undef,0)
             #to avoid costly recomputation in behavior, we collect all agents once and then use it in behavior
             all_agents = collect(allagents(model))
@@ -29,35 +35,10 @@ function agent_week!(model, social_groups, distant_groups,steps)
             push!(infected_timeline,infected_count)
             model.infected_now = infected_count
             #delay the reported infections by seven days
-            length(infected_timeline)<7 ? access_index=1 : access_index=length(infected_timeline)-6
-            model.infected_reported = infected_timeline[access_index]
-            println("infected_count is $infected_count and reported are $(model.infected_reported)")
+            length(infected_timeline)<8 ? model.infected_reported=0 : model.infected_reported = infected_timeline[length(infected_timeline)-7]
+            println("infected timeline is $infected_timeline")
+            println("infected_count is $infected_count and reported are $(model.infected_reported) at time $(model.days_passed)")
             #and add the data to the dataframe
-            append!(agent_data,day_data)
-        end
-        #same procedure for the weekend, but bigger social active/distant groups
-        for i in 1:2
-            model.days_passed+=1
-            social_active_group = rand(social_groups,Int.(round.(length(social_groups)/3)))
-            distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/3)))
-            infected_edges = Vector{Int32}(undef,0)
-            all_agents = collect(allagents(model))
-            println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
-            if (length(infected_timeline)>1)
-                today = infected_timeline[length(infected_timeline)]
-                before = infected_timeline[length(infected_timeline)-1]
-            else
-                today = 100
-                before = 100
-            end
-            push!(infected_timeline_growth,case_growth(today, before))
-            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
-            infected_count = sum([in(agent.health_status, (:E,:I,:IwS,:NQ)) for agent in  all_agents])
-            push!(infected_timeline,infected_count)
-            model.infected_now = infected_count
-            length(infected_timeline)<7  ? access_index=1 : access_index=length(infected_timeline)-6
-            model.infected_reported = infected_timeline[access_index]
-            println("infected_count is $infected_count and reported are $(model.infected_reported)")
             append!(agent_data,day_data)
         end
     end
@@ -84,17 +65,43 @@ function case_growth(today,before)
     end
 end
 
+#TODO
+#reported infected are broken
+#figure out exact transition of NQ, I, Q, etc
+#add transfer between social/distant activities and determine when to use which activity
+
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
 
     #TODO add difference between work and social activites
 
+
     #put functions within parent scope so we can read from this scope
     function move_step!(agent, model)
         #if agent is infected, add edges on his way to the array of infected edges
-        if (agent.health_status == :I)
-            append!(infected_edges, collect(dst.(agent.workplaceroute)))
-            append!(infected_edges, collect(src.(agent.workplaceroute)))
+        if in(agent.health_status, (:E,:I,:IwS,:NQ))
+            if time_of_day == :work || time_of_day == :work_back
+                append!(infected_edges, collect(dst.(agent.workplaceroute)))
+                append!(infected_edges, collect(src.(agent.workplaceroute)))
+            elseif time_of_day == :social || time_of_day == :social_back
+                append!(infected_edges, collect(dst.(agent.socialroute)))
+                append!(infected_edges, collect(src.(agent.socialroute)))
+            end
+        elseif agent.health_status == :S
+            #if not, see if the agents route coincides with the pool and see if the agent gets infected by this.
+            if time_of_day == :work || time_of_day == :back_work
+                possible_edges = length(filter(x -> in(x,infected_edges),agent.workplaceroute))
+            elseif time_of_day == :social || time_of_day == :back_social
+                possible_edges = length(filter(x -> in(x,infected_edges),agent.socialroute))
+            end
+            if (possible_edges>0)
+                agent.behavior > 1 ? risk = 3.73 : risk = 15.4
+                #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and /10 to keep confunding factors in mind.
+                rand(Binomial(length(possible_edges),risk/1000)) >= 1 ? agent.health_status = :E : agent.health_status = agent.health_status
+            end
         end
+
+
+
         #then go to workplace, social group, or home depending on the time of day
         if time_of_day == :work && agent.workplace != 0
             move_agent!(agent,agent.workplace,model)
@@ -225,7 +232,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     data1, _ = run!(model, move_step!, 1; adata = data_to_collect)
     data2, _ = run!(model, infect_step!, 1; adata = data_to_collect)
     #back home
-    time_of_day = :back
+    time_of_day = :back_work
     data3, _ = run!(model, move_step!,1; adata = data_to_collect)
     data4, _ = run!(model, infect_step!,1; adata = data_to_collect)
 
@@ -235,7 +242,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     data6, _ = run!(model, infect_step!,1; adata = data_to_collect)
 
     #and back home
-    time_of_day = :back
+    time_of_day = :back_social
     data7, _ = run!(model, move_step!,1; adata = data_to_collect)
     data8, _ = run!(model, infect_step!,1; adata = data_to_collect)
 
@@ -249,8 +256,8 @@ export agent_step!
 
 
 agent_week!(model, social_groups, distant_groups,3)
-
-for i in 1:100
-    agent = random_agent(model)
-    agent.health_status = :I
-end
+#
+# for i in 1:100
+#     agent = random_agent(model)
+#     agent.health_status = :I
+# end
