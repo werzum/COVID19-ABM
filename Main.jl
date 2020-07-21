@@ -20,6 +20,7 @@ mutable struct DemoAgent <: AbstractAgent
     health_status::Symbol #reflects the SIR extended states (Susceptible, Exposed, Infected, InfectedWitoutSymptpms, NotQuarantined, Quarantined, Dead, Immune)
     days_infected::Int16
     attitude::Int16
+    fear::Int16
     behavior::Int16
     women::Bool
     age::Int8
@@ -40,7 +41,8 @@ parameters = Dict(
             :infected_reported=>0,
             :reinfection_probability=> 0.01,
             :detection_time=> 6,
-            :death_rate=> 0.02)
+            :death_rate=> 0.02,
+            :days_passed => 0)
 
 #initialize the model and generate the map - takes about 115s
 @time model,lat,long,social_groups,distant_groups = setup(parameters)
