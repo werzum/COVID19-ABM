@@ -1,8 +1,10 @@
 function agent_week!(model, social_groups, distant_groups,steps)
     agent_data = DataFrame(step=Int64[],infected_health_status=Int64[],recovered_health_status=Int64[],susceptible_health_status=Int64[],length_health_status=Int64[])
     infected_timeline = Vector{Int16}(undef,0)
+    infected_timeline_growth = Vector{Int16}(undef,0)
     for step in steps
         for i in 1:5
+            model.days_passed+=1
             #select social&distant active groups randomly
             social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
             distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
@@ -10,8 +12,18 @@ function agent_week!(model, social_groups, distant_groups,steps)
             #to avoid costly recomputation in behavior, we collect all agents once and then use it in behavior
             all_agents = collect(allagents(model))
             println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
+            println("mean fear is $(mean([agent.fear for agent in all_agents]))")
+            #get the current case growth
+            if (length(infected_timeline)>1)
+                today = infected_timeline[length(infected_timeline)]
+                before = infected_timeline[length(infected_timeline)-1]
+            else
+                today = 100
+                before = 100
+            end
+            push!(infected_timeline_growth,case_growth(today, before))
             #run the model
-            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
             #update the count of infected now and reported
             infected_count = sum([in(agent.health_status, (:E,:I,:IwS,:NQ)) for agent in  all_agents])
             push!(infected_timeline,infected_count)
@@ -25,12 +37,21 @@ function agent_week!(model, social_groups, distant_groups,steps)
         end
         #same procedure for the weekend, but bigger social active/distant groups
         for i in 1:2
+            model.days_passed+=1
             social_active_group = rand(social_groups,Int.(round.(length(social_groups)/3)))
             distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/3)))
             infected_edges = Vector{Int32}(undef,0)
             all_agents = collect(allagents(model))
             println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
-            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
+            if (length(infected_timeline)>1)
+                today = infected_timeline[length(infected_timeline)]
+                before = infected_timeline[length(infected_timeline)-1]
+            else
+                today = 100
+                before = 100
+            end
+            push!(infected_timeline_growth,case_growth(today, before))
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
             infected_count = sum([in(agent.health_status, (:E,:I,:IwS,:NQ)) for agent in  all_agents])
             push!(infected_timeline,infected_count)
             model.infected_now = infected_count
@@ -43,21 +64,27 @@ function agent_week!(model, social_groups, distant_groups,steps)
     return agent_data
 end
 
-function threat_decay(x)
-    #fitted to datapoints of statista "disziplin lässt nach" curve
-    return 0.7960317 + 0.03615835*x - 0.00103458*x^2 + 0.000007423604*x^3
+function fear_growth(case_growth,personal_cases)
+    #lambda = max attainable fear factor -> 2?
+    #us - unconditioned stimuli, cs - conditioned stimuli -> merge both to one stimuli, cases
+    #return fear change of 1 if both rates are 1
+    return Int16(round(100*1.58198*(1-ℯ^(-case_growth*personal_cases))))
 end
 
-function global_infection_threat(x)
-    #taken from covid cases and threat
-    return 0.00007614213*x + 0.6517766
+function fear_decay(fear,time)
+    #modify fear so that it decays over time
+    return fear*ℯ^(-(time/200))
 end
 
-function personal_infection_threat(x)
-    return 8784.045 + (80.04735 - 8784.045)/(1 + (x/34517710000)^0.3102068)
+function case_growth(today,before)
+    if !in(0,(today,before))
+        return Int16(round(100*(today/before)))
+    else
+        return 100
+    end
 end
 
-function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents)
+function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
 
     #TODO add difference between work and social activites
 
@@ -97,16 +124,27 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         #get personal environment infected and compute a threat value
         #get #infected within agents environment
         acquaintances_infected = length(filter(x -> in(x.health_status, (:E,:I,:IwS,:NQ)) && (x.household == agent.household || x.workplace == agent.workplace || x.socialgroup == agent.socialgroup || x.distantgroup == agent.distantgroup), all_agents))
-        personal_environment_threat = personal_infection_threat(acquaintances_infected)
-        #println("acqu infected $number_acquaintances_infected")
-        #add these linearly*0.1 to the model
-        #threat is delayed as #cases vs fear shows, fear shows variation of 20 percent
-        global_threat = global_infection_threat(model.infected_reported)
-        overall_threat = personal_environment_threat*global_threat
+        #add them as a modifier to the fear rate
+        if acquaintances_infected == 0 || model.infected_reported == 0
+            personal_rate = 1
+        else
+            personal_rate = 1+model.infected_reported/acquaintances_infected
+        end
+
+        #fear grows if reported cases are growing and decays otherwise
+        if last(infected_timeline_growth)>=1
+            #fear(global reported case growth, personal rate and time)
+            infected_growth = last(infected_timeline_growth)/100
+            agent.fear = fear_growth(infected_growth,personal_rate)
+        else
+            #find last point of growth so we can get the time the decay lasted
+            time = length(infected_timeline_growth) - findlast(x -> x>1,infected_timeline_growth) + 1
+            #and apply the exponential decay of it
+            agent.fear = fear_decay(agent.fear, time)
+        end
         #agent behavior is computed as norm + attitude + decay(threat)
-        #TODO threat is not time-based as of now, need to adjust that.
-        println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior and threat $overall_threat")
-        agent.behavior = Int16(round(mean([mean_behavior,attitude])*threat_decay(overall_threat)))
+        #println("agent behavior is $(agent.behavior) with attitude $attitude, social norm $mean_behavior and threat $(agent.fear)")
+        agent.behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/100)))
         #println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior and threat $(threat_decay(mean([number_acquaintances_infected,global_threat])))")
     end
 
@@ -212,8 +250,7 @@ export agent_step!
 
 agent_week!(model, social_groups, distant_groups,3)
 
-# for i in 1:100
-#     agent = random_agent(model)
-#     agent.health_status = :I
-# end
-#
+for i in 1:100
+    agent = random_agent(model)
+    agent.health_status = :I
+end
