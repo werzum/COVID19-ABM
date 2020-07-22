@@ -61,7 +61,7 @@ end
 function create_chart(steps)
     #one step is a week!
     b = agent_week!(model, social_groups, distant_groups,steps)
-    @df b plot(:step,[:infected, :recovered, :susceptible,:mean_behavior,:mean_fear])
+    @df b plot([:infected, :recovered, :susceptible,:mean_behavior,:mean_fear])
 end
 
 function create_gif()
