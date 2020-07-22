@@ -59,18 +59,9 @@ function draw_route(model,lat,long)
 end
 
 function create_chart(steps)
-    N =  nagents(model)# Total initial population
-    data = agent_week!(model,social_groups,distant_groups,steps)
-    #x = data.step
-    x = eachrow(data)
-    p = Plots.plot(x, log10.(data[:, Symbol("infected_health_status")]), label = "infected")
-    plot!(p, x, log10.(data[:, Symbol("recovered_health_status")]), label = "recovered")
-    plot!(p, x, log10.(data[:, Symbol("susceptible_health_status")]), label = "susceptible")
-    dead = log10.(N .- data[:, Symbol("length_health_status")])
-    #plot!(p, x, dead, label = "dead")
-    xlabel!(p, "steps")
-    ylabel!(p, "log( count )")
-    p
+    #one step is a week!
+    b = agent_week!(model, social_groups, distant_groups,steps)
+    @df b plot(:step,[:infected, :recovered, :susceptible,:mean_behavior,:mean_fear])
 end
 
 function create_gif()
@@ -85,18 +76,9 @@ function create_gif()
 end
 
 export draw_map,draw_route,create_chart, create_gif
+
 #=savefig examples
 savefig(a,"Graphics\\example_route.png")
 using Compose
 draw(PNG("Graphics\\example_route.png",16cm,16cm),a)
-# =#
-# @df b plot(cols())
-#
-# @time b = agent_week!(model, social_groups, distant_groups,6)
-#
-# for i in 1:100
-#     agent = random_agent(model)
-#     agent.health_status = :E
-# end
-#
-# draw_route(model,lat,long)
+=#

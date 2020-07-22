@@ -1,5 +1,5 @@
 function agent_week!(model, social_groups, distant_groups,steps)
-    agent_data = DataFrame(step=Int64[],infected_health_status=Int64[],recovered_health_status=Int64[],susceptible_health_status=Int64[],length_health_status=Int64[])
+    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[])
     infected_timeline = Vector{Int16}(undef,0)
     infected_timeline_growth = Vector{Int16}(undef,0)
     for step in 1:steps
@@ -66,7 +66,7 @@ function case_growth(today,before)
 end
 
 #TODO
-#reported infected are broken
+#add wealth as factor to edge traversal risk
 #figure out exact transition of NQ, I, Q, etc
 #add transfer between social/distant activities and determine when to use which activity
 
@@ -225,7 +225,8 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     infected(x) = count(in(i,(:E,:I,:IwS,:Q,:NQ)) for i in x)
     recovered(x) = count(in(i,(:M,:D)) for i in x)
     susceptible(x) = count(i == :S for i in x)
-    data_to_collect = [(:health_status,f) for f in (infected, recovered, susceptible, length)]
+    mean_sentiment(x) = Int64(round(mean(x)))
+    data_to_collect = [(:health_status,infected),(:health_status,recovered),(:health_status,susceptible),(:behavior,mean_sentiment),(:fear,mean_sentiment)]
 
     #run the model - agents go to work, collect data
     time_of_day = :work
@@ -246,8 +247,9 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     data7, _ = run!(model, move_step!,1; adata = data_to_collect)
     data8, _ = run!(model, infect_step!,1; adata = data_to_collect)
 
-    #combine dfs and return them
+    #combine dfs,rename them appropriately and return them
     data = vcat(data1, data2, data3, data4, data5, data6, data7, data8)
+    rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear])
     return data
 end
 
@@ -255,7 +257,7 @@ export agent_step!
 
 
 
-agent_week!(model, social_groups, distant_groups,3)
+#agent_week!(model, social_groups, distant_groups,1)
 #
 # for i in 1:100
 #     agent = random_agent(model)
