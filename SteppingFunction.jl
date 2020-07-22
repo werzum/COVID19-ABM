@@ -66,14 +66,12 @@ function case_growth(today,before)
 end
 
 #TODO
-#add wealth as factor to edge traversal risk
-#figure out exact transition of NQ, I, Q, etc
 #add transfer between social/distant activities and determine when to use which activity
+#add vor verification streek how infection prob grows with household size
 
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
 
     #TODO add difference between work and social activites
-
 
     #put functions within parent scope so we can read from this scope
     function move_step!(agent, model)
@@ -94,7 +92,12 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                 possible_edges = length(filter(x -> in(x,infected_edges),agent.socialroute))
             end
             if (possible_edges>0)
+                println("found $possible_edeges possible edges")
                 agent.behavior > 1 ? risk = 3.73 : risk = 15.4
+                #use agent wealth as additional factor
+                risk = agent.wealth/219
+                risk < 0.01 ? risk = 0.01 : risk = risk
+                risk*=2-agent.wealth/219
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and /10 to keep confunding factors in mind.
                 rand(Binomial(length(possible_edges),risk/1000)) >= 1 ? agent.health_status = :E : agent.health_status = agent.health_status
             end
@@ -196,27 +199,41 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
     #transition agent to new state
     function recover_or_die!(agent, model)
-        if agent.health_status == :E && agent.days_infected >= 3 #here should go model.properties[:exposed_period]
-            #TODO now 50 50 chance, let age influence this
-            if rand()>0.5
-                agent.health_status = :I
+        #some agents are asymptomatic(IwS), the rest first becomes NonQuarantined
+        if agent.health_status == :E && agent.days_infected == model.properties[:exposed_period]
+            if rand()>0.222 #streeck infection fatality asymptomatic cases
+                agent.health_status = :NQ
             else
                 agent.health_status = :IwS
             end
-        elseif agent.health_status == :I && agent.days_infected >= 5
-            if rand()>0.5
-                agent.health_status = :NQ
-            else
+        elseif agent.health_status == :NQ && agent.days_infected == model.properties[:exposed_period]+1
+            #decide if going into quarantine, influenced by behavior
+            #this decision is only taken once when becoming symptomatic
+            if rand()*agent.behavior/100>0.5
                 agent.health_status = :Q
             end
-        elseif in(agent.health_status, (:NQ,:Q)) && agent.days_infected >= 10
-            if rand() <= model.properties[:death_rate]
-                kill_agent!(agent, model)
+        elseif (agent.health_status == :NQ || agent.health_status ==:Q) && agent.days_infected == model.properties[:exposed_period]+2
+            #see if agent gets severe symptoms or stays only mildly infected
+            #base rate is 12% in hospital, influenced by agent age, source RKI Situationsbericht 30.03
+            if rand()*agent.age/50<0.12
+                agent.health_status = :HS
+            end
+        elseif in(agent.health_status,(:HS,:IwS)) && agent.days_infected >= rand(Normal(18,4)) #after RKI Durchschn. Zeitintervall Behandlung
+            if agent.health_status == :HS
+            #see if agent with heavy symptoms dies or recovers. Happens after three weeks as ? specifies
+            #no age here, since we already used this for severe cases. Source RKI Steckbrief
+                if rand()<0.22
+                    kill_agent!(agent, model)
+                else
+                    agent.health_status = :M
+                    agent.days_infected = 0
+                end
+            #become immune after these 21 days if IwS
             else
                 agent.health_status = :M
                 agent.days_infected = 0
             end
-        elseif agent.health_status == :M && agent.days_infected > 30 #become susceptible again after two weeks
+        elseif agent.health_status == :M && agent.days_infected > rand(Normal(75,15)) #become susceptible again after two-three months (Long 2020)
             agent.health_status = :S
         end
     end
@@ -253,7 +270,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     return data
 end
 
-export agent_step!
+export agent_step!, agent_week!
 
 
 

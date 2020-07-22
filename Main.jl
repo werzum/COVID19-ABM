@@ -37,11 +37,12 @@ parameters = Dict(
             :beta_det=> 1,
             :beta_undet=> 3,
             :infection_period=> 10,
+            :exposed_period=>5,
             :infected_now=> 0,
             :infected_reported=>0,
             :reinfection_probability=> 0.01,
             :detection_time=> 6,
-            :death_rate=> 0.02,
+            :death_rate=> 0.047,
             :days_passed => 0)
 
 #initialize the model and generate the map - takes about 115s
