@@ -68,6 +68,7 @@ end
 #TODO
 #add transfer between social/distant activities and determine when to use which activity
 #add vor verification streek how infection prob grows with household size
+#we could add hospitals and let agents go there, maybe future work
 
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
 
@@ -75,8 +76,17 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
     #put functions within parent scope so we can read from this scope
     function move_step!(agent, model)
-        #if agent is infected, add edges on his way to the array of infected edges
-        if in(agent.health_status, (:E,:I,:IwS,:NQ))
+        if agent.health_status == :Q || agent.health_status == :HS
+            #if agent is quarantined or has heavy symptoms
+            #agent goes home and does not move
+            if agent.pos != agent.household
+                move_agent!(agent,agent.household,model)
+                return
+            else
+                return
+            end
+        elseif in(agent.health_status, (:E,:IwS,:NQ))
+            #if agent is infected and moves, add edges on his way to the array of infected edges
             if time_of_day == :work || time_of_day == :work_back
                 append!(infected_edges, collect(dst.(agent.workplaceroute)))
                 append!(infected_edges, collect(src.(agent.workplaceroute)))
@@ -91,6 +101,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             elseif time_of_day == :social || time_of_day == :back_social
                 possible_edges = length(filter(x -> in(x,infected_edges),agent.socialroute))
             end
+            #println(possible_edges)
             if (possible_edges>0)
                 println("found $possible_edeges possible edges")
                 agent.behavior > 1 ? risk = 3.73 : risk = 15.4
@@ -160,35 +171,50 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
     function transmit!(agent, model)
         #skip transmission for non-sick agents
-        !in(agent.health_status, (:E,:I,:IwS,:NQ)) && return
+        !in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) && return
         prop = model.properties
 
-        #set the detected/undetected infection rate
-        rate = if in(agent.health_status,(:E,:I,:IWS,:NQ))
-                prop[:beta_det]
+        #mean rate Chu 2020 f
+        rate = if agent.behavior >=1
+            3.66
         else
-            prop[:beta_undet]
+            9.5
         end
 
-        #draw a random number of people to infect in this node
-        d = Poisson(rate)
-        n = rand(d) #determine number of people to infect, based on the rate
-        n == 0 && return #skip if probability of infection =0
-        timeout = n*2
-        t = 0
+        #rate of secondary infection, Wei Li 2020
+        if agent.health_status == :Q
+            rate = 16.3
+        end
 
         #infect the number of contacts and then return
         #get node of agent, skip if only him
         node_contents = get_node_contents(agent.pos, model)
         length(node_contents)==1 && return
+        #infect x percent of the people
+        infect_people = rate/100*round(sqrt(length(node_contents)))
+        timeout = infect_people*2
+
+
+        # #set the detected/undetected infection rate
+        # rate = if in(agent.health_status,(:E,:IWS,:NQ))
+        #         prop[:beta_det]
+        # else
+        #     prop[:beta_undet]
+        # end
+        #draw a random number of people to infect in this node
+        # d = Poisson(rate)
+        # n = rand(d) #determine number of people to infect, based on the rate
+        # n == 0 && return #skip if probability of infection =0
+        # timeout = n*2
+        # t = 0
 
         #trying to infect n others in this node, timeout if in a node without eligible neighbors
-        while n > 0 && t < timeout
+        while infect_people > 0 && t < timeout
             target = id2agent(rand(node_contents), model)
             #TODO add the product of individual protection and and target protection - keeping it real simple for now
             if target.health_status == :S
                 target.health_status = :I
-                n -= 1
+                infect_people -= 1
             end
             t +=1
         end
@@ -212,13 +238,16 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             if rand()*agent.behavior/100>0.5
                 agent.health_status = :Q
             end
-        elseif (agent.health_status == :NQ || agent.health_status ==:Q) && agent.days_infected == model.properties[:exposed_period]+2
-            #see if agent gets severe symptoms or stays only mildly infected
+        elseif (agent.health_status == :NQ || agent.health_status ==:Q) && agent.days_infected > round(rand(Normal(model.properties[:exposed_period]+4),2))
+            #see if agent gets severe symptoms or stays only mildly infected, happens ~4 days after symptoms show up
             #base rate is 12% in hospital, influenced by agent age, source RKI Situationsbericht 30.03
             if rand()*agent.age/50<0.12
                 agent.health_status = :HS
             end
-        elseif in(agent.health_status,(:HS,:IwS)) && agent.days_infected >= rand(Normal(18,4)) #after RKI Durchschn. Zeitintervall Behandlung
+        elseif (agent.health_status == :NQ || agent.health_status ==:IwS) && agent.days_infected > round(rand(Normal(14,3))) #RKI Krankheitsverlauf zwei Wochen
+            #become immune again after being NQ,Q without heavy symptoms
+            agent.health_status == :M
+        elseif in(agent.health_status,(:HS,:Q)) && agent.days_infected >= 9+round(rand(Normal(10,4))) #after RKI Durchschn. Zeitintervall Behandlung, Median 10 Tage nach Hospitalisierung
             if agent.health_status == :HS
             #see if agent with heavy symptoms dies or recovers. Happens after three weeks as ? specifies
             #no age here, since we already used this for severe cases. Source RKI Steckbrief
@@ -228,12 +257,12 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                     agent.health_status = :M
                     agent.days_infected = 0
                 end
-            #become immune after these 21 days if IwS
+            #become immune after these 19 days if only Q
             else
                 agent.health_status = :M
                 agent.days_infected = 0
             end
-        elseif agent.health_status == :M && agent.days_infected > rand(Normal(75,15)) #become susceptible again after two-three months (Long 2020)
+        elseif agent.health_status == :M && agent.days_infected > round(rand(Normal(75,15))) #become susceptible again after two-three months (Long 2020)
             agent.health_status = :S
         end
     end
