@@ -31,7 +31,7 @@ function agent_week!(model, social_groups, distant_groups,steps)
             #run the model
             day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
             #update the count of infected now and reported
-            infected_count = sum([in(agent.health_status, (:E,:I,:IwS,:NQ)) for agent in  all_agents])
+            infected_count = sum([in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) for agent in  all_agents])
             push!(infected_timeline,infected_count)
             model.infected_now = infected_count
             #delay the reported infections by seven days
@@ -64,6 +64,9 @@ function case_growth(today,before)
         return 100
     end
 end
+
+#mossong 2008, contacts by age,
+age_contacts(age) = round(8.674464 + 1.216832*age - 0.05807087*age^2 + 0.001001222*age^3 - 0.000005982039*age^4)
 
 #TODO
 #add transfer between social/distant activities and determine when to use which activity
@@ -176,37 +179,31 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
         #mean rate Chu 2020 f
         rate = if agent.behavior >=1
-            3.66
+            0.0366
         else
-            9.5
+            0.095
         end
-
-        #rate of secondary infection, Wei Li 2020
+        #rate of secondary infections in household very high, Wei Li 2020, but at least contained to household
         if agent.health_status == :Q
-            rate = 16.3
+            rate = 0.163
         end
 
         #infect the number of contacts and then return
         #get node of agent, skip if only him
         node_contents = get_node_contents(agent.pos, model)
         length(node_contents)==1 && return
-        #infect x percent of the people
-        infect_people = rate/100*round(sqrt(length(node_contents)))
+        #check if age_contacts bigger than available agents, set it then to the #available agents
+        contacts = age_contacts(agent.age)
+        contacts > length(node_contents) - 1 && (contacts = length(node_contents) - 1)
+        #draw from bernoulli distribution with infection rate and average number of contacts according to age.
+        infect_people = countmap(rand(Bernoulli(rate),Int32(contacts)))[1]
+        #check if there are no people to infect
+        infect_people  == 0 && return
+        #if we have drawn more people than available, set infect_people to all other agents
+        length(node_contents) < infect_people && (infect_people = length(node_contents)-1)
+        #println("attempt to infect $infect_people people out of $contacts contacts in a $(length(node_contents)) long node with age $(agent.age)")
         timeout = infect_people*2
-
-
-        # #set the detected/undetected infection rate
-        # rate = if in(agent.health_status,(:E,:IWS,:NQ))
-        #         prop[:beta_det]
-        # else
-        #     prop[:beta_undet]
-        # end
-        #draw a random number of people to infect in this node
-        # d = Poisson(rate)
-        # n = rand(d) #determine number of people to infect, based on the rate
-        # n == 0 && return #skip if probability of infection =0
-        # timeout = n*2
-        # t = 0
+        t = 0
 
         #trying to infect n others in this node, timeout if in a node without eligible neighbors
         while infect_people > 0 && t < timeout
@@ -238,7 +235,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             if rand()*agent.behavior/100>0.5
                 agent.health_status = :Q
             end
-        elseif (agent.health_status == :NQ || agent.health_status ==:Q) && agent.days_infected > round(rand(Normal(model.properties[:exposed_period]+4),2))
+        elseif (agent.health_status == :NQ || agent.health_status ==:Q) && agent.days_infected > round(rand(Normal(model.properties[:exposed_period]+4,2)))
             #see if agent gets severe symptoms or stays only mildly infected, happens ~4 days after symptoms show up
             #base rate is 12% in hospital, influenced by agent age, source RKI Situationsbericht 30.03
             if rand()*agent.age/50<0.12
@@ -268,7 +265,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     end
 
     #data collection functions
-    infected(x) = count(in(i,(:E,:I,:IwS,:Q,:NQ)) for i in x)
+    infected(x) = count(in(i,(:E,:IwS,:Q,:NQ,:HS)) for i in x)
     recovered(x) = count(in(i,(:M,:D)) for i in x)
     susceptible(x) = count(i == :S for i in x)
     mean_sentiment(x) = Int64(round(mean(x)))

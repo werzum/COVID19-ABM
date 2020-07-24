@@ -1,7 +1,7 @@
 function add_infected(x)
     for i in 1:x
         agent = random_agent(model)
-        agent.health_status = :I
+        agent.health_status = :E
     end
 end
 
