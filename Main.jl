@@ -2,10 +2,8 @@ using Agents, Random, DataFrames, LightGraphs
 using CSV
 using Plots
 
-#TODO add arrays to keep track of the schools, homes, workplaces, so that we can set custom infection rates and so forth for them.
 #TODO map is unweighted so far, could add wheights but then have to
 #TODO could clear the warnings about changed uses of filter, csv read and filter
-#TODO incomplete routes for some? -> nah, probabbly children or elderly
 
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
@@ -22,6 +20,7 @@ mutable struct DemoAgent <: AbstractAgent
     attitude::Int16
     fear::Int16
     behavior::Int16
+    acquaintances_growth::Int32
     women::Bool
     age::Int8
     wealth::Int16
@@ -40,12 +39,13 @@ parameters = Dict(
             :exposed_period=>5,
             :infected_now=> 0,
             :infected_reported=>0,
+            :fear_decay=>false,
             :reinfection_probability=> 0.01,
             :detection_time=> 6,
             :death_rate=> 0.047,
             :days_passed => 0)
 
-#initialize the model and generate the map - takes about 115s
+#initialize the model and generate the map - takes about 115s for 13.000 agents
 @time model,lat,long,social_groups,distant_groups = setup(parameters)
 
 #step the model X times - each step takes about Xs

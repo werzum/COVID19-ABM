@@ -9,6 +9,9 @@ function reset_infected(model)
     all_agents = collect(allagents(model))
     for agent in all_agents
         agent.health_status = :S
+        agent.fear = 0
+        agent.behavior = 0
+        agent.days_infected = 0
     end
 end
 
