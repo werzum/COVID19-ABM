@@ -2,6 +2,7 @@ function agent_week!(model, social_groups, distant_groups,steps)
     agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[])
     infected_timeline = Vector{Int16}(undef,0)
     infected_timeline_growth = Vector{Int16}(undef,0)
+    attitude, norms = read_message_data()
     for step in 1:steps
         println("step $step")
         for i in 1:7
@@ -48,7 +49,58 @@ function agent_week!(model, social_groups, distant_groups,steps)
             append!(agent_data,day_data)
         end
     end
+    #reset norms message property in each case so that it can be reactived when needed
+    model.properties[:norms_message] = false
     return agent_data
+end
+
+function read_message_data()
+    rawdata_attitude = CSV.read("SourceData\\attitude.csv")
+    attitude = rawdata_attitude.Value
+    rawdata_norms = CSV.read("SourceData\\norms.csv")
+    norms = rawdata_norms.Value
+    return attitude, norms
+end
+
+function send_messages(day,attitude,norms)
+    attitude_message_frequency = attitude_frequency(day,attitude)
+    norm_message_frequency = norm_frequency(day)
+    if day % attitude_message_frequency == 0
+        send_attitude()
+    end
+    if day % norm_message_frequency == 0
+        send_norms()
+    end
+end
+
+function attitude_frequency(day,attitude)
+    #send at least every ten days and at most each day a message
+    value = 10-attitude[day]*1000
+    value < 1 && (value = 1)
+    value > 10 && (value = 10)
+    return value
+end
+
+function norm_frequency(day,norm)
+    #send at least every ten days and at most each day a message
+    value = round(10-attitude[day]*1/3
+    value < 1 && (value = 1)
+    value > 10 && (value = 10)
+    return value
+end
+
+
+function send_attitude()
+    #slightly increase attitude by setting model parameter which influences norm calculation in agent behavior function
+    model.properties[:norms_message] = true
+end
+
+function send_norms()
+    all_agents = collect(allagents(model))
+    #remove 10% since 10% dont use media/think its not trustful in this respect (NDR report)
+    selected_agents = rand(all_agents, length(all_agents)*0.9)
+    #slightly increase attitude
+    (selected_agents.attitude).*1.01
 end
 
 function fear_growth(case_growth,personal_cases)
@@ -79,7 +131,8 @@ end
 
 #TODO
 #add vor verification streek how infection prob grows with household size
-#we could add hospitals and let agents go there, maybe future work
+#69,2% work in homeoffice or office has closed
+#behavior should be normalized for 1, since I am using this as treshold
 
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
 
@@ -160,9 +213,11 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     end
 
     function behavior!(agent, model)
+        #TODO do this only once per day
         #get behavior of others in same nodes
         node_agents = get_node_agents(agent.pos,model)
         mean_behavior = mean([agent.behavior for agent in node_agents])
+        model.properties[:norms_message] == true && mean_behavior*0.01
 
         #get the agents attitude
         attitude = agent.attitude
@@ -190,25 +245,8 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
         #and apply the exponential decay to it
         agent.fear = Int16(round(fear_decay(agent.fear, time)))
-        #from now on, the decay function governs the behavior
-        #model.properties[:fear_decay] = true
 
-        #TODO or kicks decay in after a fixed delay we have when dealing with fear (how long for same stimulus? whats the time needed?)
-
-        # if (length(infected_timeline_growth)>3 && ((infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 1)) == trues(3)) || model.properties[:fear_decay]
-        #     println("reached decay")
-        #     #find last point of growth so we can get the time the decay lasted
-        #     time = length(infected_timeline_growth) - findlast(x -> x>1,infected_timeline_growth) + 1
-        #     #and apply the exponential decay to it
-        #     agent.fear = fear_decay(agent.fear, time)
-        #     #from now on, the decay function governs the behavior
-        #     model.properties[:fear_decay] = true
-        # else
-        #     #fear(global reported case growth, personal rate and time)
-        #     infected_growth = last(infected_timeline_growth)/100
-        #     agent.fear = fear_growth(infected_growth,personal_rate)
-        # end
-        #agent behavior is computed as norm + attitude + decay(threat)
+        #agent behavior is computed as (norm + attitude)/2 + decay(threat)
         #println("agent behavior is $(agent.behavior) with attitude $attitude, social norm $mean_behavior and threat $(agent.fear)")
         agent.behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/100)))
         if(agent.id == 10)
@@ -243,6 +281,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         length(node_contents)==1 && return
         #
         contacts = contacts_reworked(Int32(agent.age))
+        #TODO divide contact rate by #timesteps per day since the estimate is for daily contacts
 
         #if agent is older than 80, function gets negative. Fix this and also giving agents a contact ceiling of 30, set it to mean #contacts if outside bounds
         if 0 <= contacts < 30
@@ -268,6 +307,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         infect_people = countmap(rand(Bernoulli(rate),Int32(round(contacts))))[1]
         #check if there are no people to infect
         infect_people  == 0 && return
+        println("infect $infect_people out of $contacts contacts")
         #if we have drawn more people than available, set infect_people to all other agents
         length(node_contents) < infect_people && (infect_people = length(node_contents)-1)
         #println("attempt to infect $infect_people people out of $contacts contacts in a $(length(node_contents)) long node with age $(agent.age)")
