@@ -13,6 +13,7 @@ function reset_infected(model)
         agent.behavior = 0
         agent.days_infected = 0
     end
+    model.properties[:days_passed] = 0
 end
 
 export add_infected,reset_infected

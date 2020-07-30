@@ -40,6 +40,7 @@ parameters = Dict(
             :infected_now=> 0,
             :infected_reported=>0,
             :norms_message=>false,
+            :daily_cases=>0,
             :reinfection_probability=> 0.01,
             :detection_time=> 6,
             :death_rate=> 0.047,
@@ -52,3 +53,6 @@ parameters = Dict(
 
 #Plot map
 draw_map(model,lat,long)
+
+x = [agent.attitude for agent in collect(allagents(model))]
+minimum(x)
