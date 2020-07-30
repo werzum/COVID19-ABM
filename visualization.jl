@@ -64,8 +64,8 @@ function create_chart(steps)
     p = plot(b.infected,label="infected")
     plot!(p,b.susceptible,label="susceptible")
     plot!(p,b.recovered,label="recovered")
-    plot!(p,b.mean_fear.*20,label="fear")
-    plot!(p,b.mean_behavior.*20,label="behavior")
+    plot!(p,b.mean_fear.*100,label="fear")
+    plot!(p,b.mean_behavior.*100,label="behavior")
 end
 
 function create_gif()

@@ -2,14 +2,16 @@ function agent_week!(model, social_groups, distant_groups,steps)
     agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[])
     infected_timeline = Vector{Int16}(undef,0)
     infected_timeline_growth = Vector{Int16}(undef,0)
+    #initialize the timline
+    push!(infected_timeline,0)
     attitude, norms = read_message_data()
     for step in 1:steps
         println("step $step")
         for i in 1:7
             model.days_passed+=1
+            send_messages(model.days_passed,attitude,norms)
             #select social&distant active groups randomly, more agents are social active on the weekend
             if i < 6
-
                 social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
                 #distant = Shopping + Sport, shopping 2x/week (https://de.statista.com/statistik/daten/studie/214882/umfrage/einkaufsfrequenz-beim-lebensmitteleinkauf/)
                 #sports 2,5x per week https://de.statista.com/statistik/daten/studie/177007/umfrage/tage-pro-woche-an-denen-sport-getrieben-wird/
@@ -36,7 +38,9 @@ function agent_week!(model, social_groups, distant_groups,steps)
             day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
             #update the count of infected now and reported
             #since actual cases are about 1,8x higher than reported cases, divide this (https://www.mpg.de/14906897/0604-defo-137749-wie-viele-menschen-haben-tatsaechlich-covid-19)
-            infected_count = round(sum([in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) for agent in  all_agents])/1.8)
+            #new_infections = model.properties[:daily_cases]
+            model.properties[:daily_cases] = 0
+            infected_count = round(sum([in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) for agent in  all_agents]))
             push!(infected_timeline,infected_count)
             model.infected_now = infected_count
             #delay the reported infections by two days as Verzug COronadaten shows https://www.ndr.de/nachrichten/info/Coronavirus-Neue-Daten-stellen-Epidemie-Verlauf-infrage,corona2536.html
@@ -63,12 +67,15 @@ function read_message_data()
 end
 
 function send_messages(day,attitude,norms)
-    attitude_message_frequency = attitude_frequency(day,attitude)
-    norm_message_frequency = norm_frequency(day)
+    attitude_message_frequency = round(attitude_frequency(day,attitude))
+    norm_message_frequency = round(norm_frequency(day,norms))
+    println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms")
     if day % attitude_message_frequency == 0
+        println("sent attitude!!!")
         send_attitude()
     end
     if day % norm_message_frequency == 0
+        println("sent norms!!!")
         send_norms()
     end
 end
@@ -83,7 +90,7 @@ end
 
 function norm_frequency(day,norm)
     #send at least every ten days and at most each day a message
-    value = round(10-attitude[day]*1/3
+    value = round(10-norm[day]*1/3)
     value < 1 && (value = 1)
     value > 10 && (value = 10)
     return value
@@ -98,9 +105,9 @@ end
 function send_norms()
     all_agents = collect(allagents(model))
     #remove 10% since 10% dont use media/think its not trustful in this respect (NDR report)
-    selected_agents = rand(all_agents, length(all_agents)*0.9)
+    selected_agents = rand(all_agents, Int32(round(length(all_agents)*0.9)))
     #slightly increase attitude
-    (selected_agents.attitude).*1.01
+    [agent.attitude=round(agent.attitude*1.01) for agent in selected_agents]
 end
 
 function fear_growth(case_growth,personal_cases)
@@ -131,8 +138,9 @@ end
 
 #TODO
 #add vor verification streek how infection prob grows with household size
-#69,2% work in homeoffice or office has closed
 #behavior should be normalized for 1, since I am using this as treshold
+#fear still moving erratically
+#
 
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
 
@@ -166,7 +174,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             end
             #if our route coincides with the daily route of others
             if (possible_edges>0)
-                agent.behavior > 1 ? risk = 3.73 : risk = 15.4
+                agent.behavior > 100 ? risk = 3.73 : risk = 15.4
                 #use agent wealth as additional factor
                 wealth_modificator = agent.wealth/219
                 wealth_modificator < 0.01 && (wealth_modificator = 0.01)
@@ -174,7 +182,10 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                 #risk increases when agent
                 risk=risk*(2-wealth_modificator)
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts
-                rand(Binomial(possible_edges,(risk/100)*0.003)) >= 1 ? agent.health_status = :E : agent.health_status = agent.health_status
+                if rand(Binomial(possible_edges,(risk/100)*0.003)) >= 1
+                    agent.health_status = :E
+                    model.properties[:daily_cases]+=1
+                end
             end
             return true
         end
@@ -193,9 +204,16 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                 move == true && move_agent!(agent,agent.workplace,model)
             end
         elseif time_of_day == :social && in(agent.socialgroup, social_active_group)
+            #skip social interaction, ie. social distancing, when behavior is active and
+            if agent.behavior>100 && rand()<0.3
+                return
+            end
             move = move_infect!(agent)
             move == true && move_agent!(agent,agent.socialgroup,model)
         elseif time_of_day == :social && in(agent.distantgroup, distant_active_group)
+            if agent.behavior>100 && rand()<0.3
+                return
+            end
             move = move_infect!(agent)
             move == true && move_agent!(agent,agent.socialgroup,model)
         else
@@ -213,11 +231,14 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     end
 
     function behavior!(agent, model)
-        #TODO do this only once per day
+        #do this only once per day
+        time_of_day != :work && return
         #get behavior of others in same nodes
         node_agents = get_node_agents(agent.pos,model)
         mean_behavior = mean([agent.behavior for agent in node_agents])
-        model.properties[:norms_message] == true && mean_behavior*0.01
+
+        #println("mean behavior is $mean_behavior")
+        model.properties[:norms_message] == true && (mean_behavior*=1.01)
 
         #get the agents attitude
         attitude = agent.attitude
@@ -240,17 +261,31 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
         #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
         #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
-        infected_growth = last(infected_timeline_growth)/100
+        infected_growth = last(infected_timeline_growth)/50
         agent.fear = fear_growth(infected_growth,growth)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
-        #and apply the exponential decay to it
-        agent.fear = Int16(round(fear_decay(agent.fear, time)))
+        #and apply the exponential decay to it after two weeks
+        model.properties[:days_passed]>13 && (agent.fear = Int16(round(fear_decay(agent.fear, time))))
 
         #agent behavior is computed as (norm + attitude)/2 + decay(threat)
-        #println("agent behavior is $(agent.behavior) with attitude $attitude, social norm $mean_behavior and threat $(agent.fear)")
-        agent.behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/100)))
+        old_behavior = agent.behavior
+        new_behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/100)))
+
+        #catch the Initialization of behavior
+        old_behavior == 0 && (old_behavior = new_behavior)
+        #check boundaries
+        (new_behavior < 0 || new_behavior > 200) && (new_behavior=60)
+        #prevent new behavior from jumping around too fast, a one-day stall in infection could reduce behavior too strong
+        if new_behavior>old_behavior*1.2
+            new_behavior = Int16(round(old_behavior*1.2))
+        elseif new_behavior < old_behavior*0.8
+            new_behavior = Int16(round(old_behavior*0.8))
+        end
+        #println("now new_behavior $new_behavior")
+        agent.behavior = new_behavior
+
         if(agent.id == 10)
-            println("the fear is $(agent.fear), the time is $time, with $acquaintances_infected and a growth of $growth")
+            println("the fear is $(agent.fear), the time is $time, with a growth of $infected_growth")
             println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior")
         end
     end
@@ -265,7 +300,8 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         prop = model.properties
 
         #mean rate Chu 2020 f
-        rate = if agent.behavior >=1
+        rate = if agent.behavior >=100
+            print
             0.0366
         else
             0.095
@@ -307,7 +343,6 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         infect_people = countmap(rand(Bernoulli(rate),Int32(round(contacts))))[1]
         #check if there are no people to infect
         infect_people  == 0 && return
-        println("infect $infect_people out of $contacts contacts")
         #if we have drawn more people than available, set infect_people to all other agents
         length(node_contents) < infect_people && (infect_people = length(node_contents)-1)
         #println("attempt to infect $infect_people people out of $contacts contacts in a $(length(node_contents)) long node with age $(agent.age)")
@@ -319,6 +354,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             target = model[rand(node_contents)]
             #TODO add the product of individual protection and and target protection - keeping it real simple for now
             if target.health_status == :S
+                model.properties[:daily_cases]+=1
                 target.health_status = :E
                 infect_people -= 1
             end

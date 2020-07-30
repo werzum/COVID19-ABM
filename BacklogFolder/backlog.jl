@@ -46,6 +46,19 @@ savefig(a,"Graphics\\histogram_workplace_distribution.png")
 a = plot(workplacesize_distribution)
 savefig(a,"Graphics\\workplace_size_rayleigh.png")
 
+#message attitude function
+#read the csv and extract the values
+@time rawdata_attitude = CSV.read("SourceData\\attitude.csv")
+attitude = rawdata_attitude.Value
+rawdata_norms = CSV.read("SourceData\\norms.csv")
+norms = rawdata_norms.Value
+plot(attitude)
+println(attitude)
+for f in 1:length(attitude)
+    if f % 8 == 0
+        println(f,"  ",attitude[f])
+    end
+end
 #leftovers from csv manipulation that are now merged into rawdata.csv
 
 #wrote changes to csv so we dont have to do basic cleaning again and again

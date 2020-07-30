@@ -258,6 +258,9 @@ function compute_attitudes(agent_properties)
             #set the baseline at average age 40, older people get a penalty on attitude, younger a bonus
             agent.attitude = agent.attitude + Int(round(10-(agent.age/4)))
         end
+        #prevent attitude from getting negative
+        agent.attitude<=0 && (agent.attitude = 1)
+
     end
 end
 
