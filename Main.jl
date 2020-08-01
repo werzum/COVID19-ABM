@@ -41,18 +41,17 @@ parameters = Dict(
             :infected_reported=>0,
             :norms_message=>false,
             :daily_cases=>0,
+            :work_closes=>21,
+            :work_opens=>70,
             :reinfection_probability=> 0.01,
             :detection_time=> 6,
             :death_rate=> 0.047,
             :days_passed => 0)
 
 #initialize the model and generate the map - takes about 115s for 13.000 agents
-@time model,lat,long,social_groups,distant_groups = setup(parameters)
+model,lat,long,social_groups,distant_groups = setup(parameters)
 
 #step the model X times - each step takes about Xs
 
 #Plot map
 draw_map(model,lat,long)
-
-x = [agent.attitude for agent in collect(allagents(model))]
-minimum(x)

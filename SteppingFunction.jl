@@ -1,9 +1,10 @@
 function agent_week!(model, social_groups, distant_groups,steps)
-    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[])
-    infected_timeline = Vector{Int16}(undef,0)
-    infected_timeline_growth = Vector{Int16}(undef,0)
+    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],daily_cases=Int32[])
+    infected_timeline = Vector{Int32}(undef,0)
+    infected_timeline_growth = Vector{Int32}(undef,0)
     #initialize the timline
     push!(infected_timeline,0)
+    push!(infected_timeline_growth,100)
     attitude, norms = read_message_data()
     for step in 1:steps
         println("step $step")
@@ -25,6 +26,14 @@ function agent_week!(model, social_groups, distant_groups,steps)
             all_agents = collect(allagents(model))
             println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
             println("mean fear is $(mean([agent.fear for agent in all_agents]))")
+
+            #run the model
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
+            #update the count of infected now and reported
+            #since actual cases are about 1,8x higher than reported cases, divide this (https://www.mpg.de/14906897/0604-defo-137749-wie-viele-menschen-haben-tatsaechlich-covid-19)
+            infected_count = last(infected_timeline)+model.properties[:daily_cases]#round(sum([in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) for agent in  all_agents]))
+            push!(infected_timeline,infected_count)
+
             #get the current case growth
             if (length(infected_timeline)>1)
                 today = infected_timeline[length(infected_timeline)]
@@ -34,42 +43,40 @@ function agent_week!(model, social_groups, distant_groups,steps)
                 before = 100
             end
             push!(infected_timeline_growth,case_growth(today, before))
-            #run the model
-            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
-            #update the count of infected now and reported
-            #since actual cases are about 1,8x higher than reported cases, divide this (https://www.mpg.de/14906897/0604-defo-137749-wie-viele-menschen-haben-tatsaechlich-covid-19)
-            #new_infections = model.properties[:daily_cases]
-            model.properties[:daily_cases] = 0
-            infected_count = round(sum([in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) for agent in  all_agents]))
-            push!(infected_timeline,infected_count)
+
             model.infected_now = infected_count
+            model.properties[:daily_cases] = 0
             #delay the reported infections by two days as Verzug COronadaten shows https://www.ndr.de/nachrichten/info/Coronavirus-Neue-Daten-stellen-Epidemie-Verlauf-infrage,corona2536.html
             #nowcast shows 3 days delay and 10% less infected as report delay
             length(infected_timeline)<4 ? model.infected_reported=last(infected_timeline)*0.9 : model.infected_reported = infected_timeline[length(infected_timeline)-3]
             println("infected timeline is $infected_timeline")
             println("infected growth is $infected_timeline_growth")
-            println("infected_count is $infected_count and reported are $(model.infected_reported) at time $(model.days_passed)")
+            println("at time $(model.days_passed)")
             #and add the data to the dataframe
             append!(agent_data,day_data)
         end
+        #reset norms message property in each case so that it can be reactived when needed
+        model.properties[:norms_message] = false
     end
-    #reset norms message property in each case so that it can be reactived when needed
-    model.properties[:norms_message] = false
     return agent_data
 end
 
 function read_message_data()
     rawdata_attitude = CSV.read("SourceData\\attitude.csv")
+    #remove the first month so we start at the 14.02.2020 (16 cases in all of germany), no news found until then
+    rawdata_attitude = rawdata_attitude[31:end,:]
     attitude = rawdata_attitude.Value
     rawdata_norms = CSV.read("SourceData\\norms.csv")
+    rawdata_norms = rawdata_norms[41:end,:]
     norms = rawdata_norms.Value
+    norms_data = rawdata_norms.Date
     return attitude, norms
 end
 
 function send_messages(day,attitude,norms)
     attitude_message_frequency = round(attitude_frequency(day,attitude))
     norm_message_frequency = round(norm_frequency(day,norms))
-    println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms")
+    #println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms")
     if day % attitude_message_frequency == 0
         println("sent attitude!!!")
         send_attitude()
@@ -107,7 +114,7 @@ function send_norms()
     #remove 10% since 10% dont use media/think its not trustful in this respect (NDR report)
     selected_agents = rand(all_agents, Int32(round(length(all_agents)*0.9)))
     #slightly increase attitude
-    [agent.attitude=round(agent.attitude*1.01) for agent in selected_agents]
+    [agent.attitude=round(agent.attitude*1.05) for agent in selected_agents]
 end
 
 function fear_growth(case_growth,personal_cases)
@@ -138,11 +145,9 @@ end
 
 #TODO
 #add vor verification streek how infection prob grows with household size
-#behavior should be normalized for 1, since I am using this as treshold
-#fear still moving erratically
-#
+#fix data so that infected cases keep going up -> maybe just pass infected_timeline for infected? when last shows slow, steady grow we are done
 
-function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline_growth)
+function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
 
     #put functions within parent scope so we can read from this scope
     function move_infect!(agent)
@@ -172,6 +177,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             elseif time_of_day == :social || time_of_day == :back_social
                 possible_edges = length(filter(x -> in(x,infected_edges),merge(collect(dst.(agent.socialroute)),collect(src.(agent.socialroute)))))
             end
+
             #if our route coincides with the daily route of others
             if (possible_edges>0)
                 agent.behavior > 100 ? risk = 3.73 : risk = 15.4
@@ -181,8 +187,8 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                 wealth_modificator > 1.9 && (wealth_modificator = 1.9)
                 #risk increases when agent
                 risk=risk*(2-wealth_modificator)
-                #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts
-                if rand(Binomial(possible_edges,(risk/100)*0.003)) >= 1
+                #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts and /10 for scale
+                if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
                     agent.health_status = :E
                     model.properties[:daily_cases]+=1
                 end
@@ -190,9 +196,14 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             return true
         end
     end
+
     function move_step!(agent, model)
         #check which time of day it is, then calculate move infection if not in quarantine, and finally move the agent
         if time_of_day == :work && agent.workplace != 0
+            #20% stay at home during covid contact prohibition
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && rand()<0.2
+                return
+            end
             #on the weekends, only ~20% go to work https://www.destatis.de/DE/Themen/Arbeit/Arbeitsmarkt/Qualitaet-Arbeit/Dimension-3/wochenendarbeitl.html
             if length(social_active_group)==Int(round(length(social_groups)/3))
                 if rand() < 0.0276
@@ -204,16 +215,17 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                 move == true && move_agent!(agent,agent.workplace,model)
             end
         elseif time_of_day == :social && in(agent.socialgroup, social_active_group)
-            #skip social interaction, ie. social distancing, when behavior is active and
-            if agent.behavior>100 && rand()<0.3
+            #skip social interaction, ie. social distancing, when behavior is active and everything is closed
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 100 && rand()<0.9
                 return
             end
             move = move_infect!(agent)
             move == true && move_agent!(agent,agent.socialgroup,model)
         elseif time_of_day == :social && in(agent.distantgroup, distant_active_group)
-            if agent.behavior>100 && rand()<0.3
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 100 && rand()<0.9
                 return
             end
+
             move = move_infect!(agent)
             move == true && move_agent!(agent,agent.socialgroup,model)
         else
@@ -231,6 +243,8 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     end
 
     function behavior!(agent, model)
+        #only calculate behavior each second day
+        #model.properties[:days_passed] % 2 == 0 && return
         #do this only once per day
         time_of_day != :work && return
         #get behavior of others in same nodes
@@ -238,7 +252,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         mean_behavior = mean([agent.behavior for agent in node_agents])
 
         #println("mean behavior is $mean_behavior")
-        model.properties[:norms_message] == true && (mean_behavior*=1.01)
+        model.properties[:norms_message] == true && (mean_behavior*=1.05)
 
         #get the agents attitude
         attitude = agent.attitude
@@ -261,36 +275,50 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
         #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
         #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
-        infected_growth = last(infected_timeline_growth)/50
-        agent.fear = fear_growth(infected_growth,growth)
+        #infected_growth = last(infected_timeline_growth)/50
+        if length(infected_timeline)>1
+            daily_cases = infected_timeline[end] - infected_timeline[end-1]
+        else
+            daily_cases = infected_timeline[end]
+        end
+        daily_cases/=200
+        acquaintances_infected_now = acquaintances_infected/15
+        agent.fear = fear_growth(daily_cases,acquaintances_infected_now)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
-        #and apply the exponential decay to it after two weeks
-        model.properties[:days_passed]>13 && (agent.fear = Int16(round(fear_decay(agent.fear, time))))
+        #and apply the exponential decay to it after two weeks and we didnt have growth for three days
+
+        if model.properties[:days_passed] > 7 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 110,trues(3))
+            agent.fear = Int16(round(fear_decay(agent.fear, time)))
+        end
 
         #agent behavior is computed as (norm + attitude)/2 + decay(threat)
         old_behavior = agent.behavior
+        #reduced influence of fear so that messages can take over when due
         new_behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/100)))
 
         #catch the Initialization of behavior
         old_behavior == 0 && (old_behavior = new_behavior)
         #check boundaries
-        (new_behavior < 0 || new_behavior > 200) && (new_behavior=60)
+        #(new_behavior < 0 || new_behavior > 200) && (new_behavior=60)
         #prevent new behavior from jumping around too fast, a one-day stall in infection could reduce behavior too strong
-        if new_behavior>old_behavior*1.2
-            new_behavior = Int16(round(old_behavior*1.2))
-        elseif new_behavior < old_behavior*0.8
-            new_behavior = Int16(round(old_behavior*0.8))
+
+        if new_behavior>old_behavior*1.4
+            #round up to prevent behavior getting stuck at 1 for initially small increments
+            new_behavior = Int16(ceil(old_behavior*1.4))
+        elseif new_behavior < old_behavior*0.9
+            new_behavior = Int16(ceil(old_behavior*0.9))
         end
-        #println("now new_behavior $new_behavior")
         agent.behavior = new_behavior
 
         if(agent.id == 10)
-            println("the fear is $(agent.fear), the time is $time, with a growth of $infected_growth")
+            println("the fear is $(agent.fear), the time is $time, with a daily cases of $daily_cases")
             println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior")
         end
     end
 
     function transmit!(agent, model)
+        #increment the sickness state of immune agents
+        agent.health_status == :M && (agent.days_infected+=1)
         #skip transmission for non-sick agents
         !in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) && return
         #also skip if exposed, but not yet infectious. RKI Steckbrief says 2 days before onset of symptoms
@@ -300,7 +328,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         prop = model.properties
 
         #mean rate Chu 2020 f
-        rate = if agent.behavior >=100
+        rate = if agent.behavior > 100
             print
             0.0366
         else
@@ -317,7 +345,6 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         length(node_contents)==1 && return
         #
         contacts = contacts_reworked(Int32(agent.age))
-        #TODO divide contact rate by #timesteps per day since the estimate is for daily contacts
 
         #if agent is older than 80, function gets negative. Fix this and also giving agents a contact ceiling of 30, set it to mean #contacts if outside bounds
         if 0 <= contacts < 30
@@ -375,21 +402,21 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                 agent.health_status = :IwS
             end
         elseif agent.health_status == :NQ && agent.days_infected == model.properties[:exposed_period]+1
-            #decide if going into quarantine, influenced by behavior
+            #decide if going into quarantine, influenced by behavior - since its mandatory by government, only small percentage doesnt go into quarantine
             #this decision is only taken once when becoming symptomatic
-            if rand()*agent.behavior/100>0.5
+            if rand()*agent.behavior/100>0.05
                 agent.health_status = :Q
             end
-        elseif (agent.health_status == :NQ || agent.health_status ==:Q) && agent.days_infected > round(rand(Normal(model.properties[:exposed_period]+4,2)))
+        elseif (agent.health_status == :NQ || agent.health_status ==:Q) && agent.days_infected == model.properties[:exposed_period]+4
             #see if agent gets severe symptoms or stays only mildly infected, happens ~4 days after symptoms show up
             #base rate is 12% in hospital, influenced by agent age, source RKI Situationsbericht 30.03
             if rand()*agent.age/50<0.12
                 agent.health_status = :HS
             end
-        elseif (agent.health_status == :NQ || agent.health_status ==:IwS) && agent.days_infected > round(rand(Normal(14,3))) #RKI Krankheitsverlauf zwei Wochen
+        elseif (agent.health_status == :NQ || agent.health_status ==:IwS) && agent.days_infected == 14 #RKI Krankheitsverlauf zwei Wochen
             #become immune again after being NQ,Q without heavy symptoms
             agent.health_status == :M
-        elseif in(agent.health_status,(:HS,:Q)) && agent.days_infected >= 9+round(rand(Normal(10,4))) #after RKI Durchschn. Zeitintervall Behandlung, Median 10 Tage nach Hospitalisierung
+        elseif in(agent.health_status,(:HS,:Q)) && agent.days_infected == 9+10 #after RKI Durchschn. Zeitintervall Behandlung, Median 10 Tage nach Hospitalisierung
             if agent.health_status == :HS
             #see if agent with heavy symptoms dies or recovers. Happens after three weeks as ? specifies
             #no age here, since we already used this for severe cases. Source RKI Steckbrief
@@ -397,14 +424,12 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                     kill_agent!(agent, model)
                 else
                     agent.health_status = :M
-                    agent.days_infected = 0
                 end
             #become immune after these 19 days if only Q
             else
                 agent.health_status = :M
-                agent.days_infected = 0
             end
-        elseif agent.health_status == :M && agent.days_infected > round(rand(Normal(75,15))) #become susceptible again after two-three months (Long 2020)
+        elseif agent.health_status == :M && agent.days_infected == 75 #become susceptible again after two-three months (Long 2020)
             agent.health_status = :S
         end
     end
@@ -415,31 +440,34 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     susceptible(x) = count(i == :S for i in x)
     mean_sentiment(x) = Int64(round(mean(x)))
     data_to_collect = [(:health_status,infected),(:health_status,recovered),(:health_status,susceptible),(:behavior,mean_sentiment),(:fear,mean_sentiment)]
+    model_data_to_collect = [(:daily_cases)]
 
     #preallocate some arrays
     aquaintances_vector = Vector{Int64}(undef, length(all_agents))
     #run the model - agents go to work, collect data
     time_of_day = :work
-    data1, _ = run!(model, move_step!, 1; adata = data_to_collect)
-    data2, _ = run!(model, infect_step!, 1; adata = data_to_collect)
+    data1, data1_m = run!(model, move_step!, 1; adata = data_to_collect, mdata = model_data_to_collect )
+    data2, data2_m = run!(model, infect_step!, 1; adata = data_to_collect,mdata = model_data_to_collect)
     #back home
     time_of_day = :back_work
-    data3, _ = run!(model, move_step!,1; adata = data_to_collect)
-    data4, _ = run!(model, infect_step!,1; adata = data_to_collect)
+    data3, data3_m = run!(model, move_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
+    data4, data4_m = run!(model, infect_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
 
     #if social/distant
     time_of_day = :social
-    data5, _ = run!(model, move_step!,1; adata = data_to_collect)
-    data6, _ = run!(model, infect_step!,1; adata = data_to_collect)
+    data5, data5_m = run!(model, move_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
+    data6, data6_m = run!(model, infect_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
 
     #and back home
     time_of_day = :back_social
-    data7, _ = run!(model, move_step!,1; adata = data_to_collect)
-    data8, _ = run!(model, infect_step!,1; adata = data_to_collect)
+    data7, data7_m = run!(model, move_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
+    data8, data8_m = run!(model, infect_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
 
     #combine dfs,rename them appropriately and return them
-    data = vcat(data1, data2, data3, data4, data5, data6, data7, data8)
-    rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear])
+    data_m = vcat(data1_m,data2_m,data3_m,data4_m,data5_m,data6_m,data7_m,data8_m)
+    data_a = vcat(data1, data2, data3, data4, data5, data6, data7, data8)
+    data = hcat(data_a,data_m[:daily_cases])
+    rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:daily_cases])
     return data
 end
 
