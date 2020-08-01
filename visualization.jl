@@ -66,6 +66,7 @@ function create_chart(steps)
     plot!(p,b.recovered,label="recovered")
     plot!(p,b.mean_fear.*100,label="fear")
     plot!(p,b.mean_behavior.*100,label="behavior")
+    plot!(p,b.daily_cases,label="daily cases")
 end
 
 function create_gif()
