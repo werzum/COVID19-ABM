@@ -146,6 +146,7 @@ end
 #TODO
 #add vor verification streek how infection prob grows with household size
 #fix data so that infected cases keep going up -> maybe just pass infected_timeline for infected? when last shows slow, steady grow we are done
+#,aybe higher threat perception for women as Perotta
 
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
 
