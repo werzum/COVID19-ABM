@@ -248,7 +248,7 @@ function compute_attitudes(agent_properties)
     #manipulate the attitude according to demographic factors
     for agent in agent_properties
         #women have more trust than men
-        if agent.women
+        if !agent.women
             agent.attitude = agent.attitude+rand(1:1:10)
         else
             agent.attitude = agent.attitude-rand(1:1:10)
