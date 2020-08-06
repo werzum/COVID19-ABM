@@ -103,15 +103,14 @@ function norm_frequency(day,norm)
     return value
 end
 
-
 function send_norms()
     #slightly increase attitude by setting model parameter which influences norm calculation in agent behavior function
-    model.properties[:norms_message] = true
+    model.properties[:norms_message] = model.days_passed
 end
 
 function send_attitude()
     all_agents = collect(allagents(model))
-    [agent.attitude = Int16(round(attitude_growth(agent.attitude))) for agent in all_agents]
+    [agent.attitude = Int16(round(property_growth(agent.attitude))) for agent in all_agents]
 end
 
 function fear_growth(case_growth,personal_cases)
@@ -121,11 +120,11 @@ function fear_growth(case_growth,personal_cases)
     return Int16(round(100*1.58198*(1-ℯ^(-case_growth*personal_cases))))
 end
 
-function attitude_growth(attitude)
+function property_growth(property)
     #scale the attitude to fit e
-    attitude_factor = scale(0,158,0,4,attitude)
+    property_factor = scale(0,158,0,4,property)
     #return it with an increase of max. 1.58
-    return attitude*(1+ℯ^(-attitude_factor))
+    return property*(1+ℯ^(-property_factor))
 end
 
 function attitude_decay(original_attitude, attitude)
@@ -138,11 +137,10 @@ function attitude_decay(original_attitude, attitude)
     return round(unscaled_attitude*(ℯ^(-difference/2)))
 end
 
-function fear_decay(fear,time)
+function norm_decay(norm,time)
     #modify fear so that it decays over time
-    return fear*ℯ^(-(time/200))
+    return norm*ℯ^(-(time/300))
 end
-
 
 function fear_decay(fear,time)
     #modify fear so that it decays over time
@@ -282,6 +280,16 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         #get behavior of others in same nodes
         node_agents = get_node_agents(agent.pos,model)
         mean_behavior = mean([agent.behavior for agent in node_agents])
+        #increase the perceived norms if a message was sent
+        if(model.properties[:days_passed]==model.properties[:norms_message])
+            mean_behavior = property_growth(mean_behavior)
+        end
+        #and let it decrease thereafter step by step. Dies out after about 7 days
+        if(model.properties[:days_passed]>model.properties[:norms_message])
+            time_passed = model.properties[:days_passed] - model.properties[:norms_message]
+            mean_behavior = property_growth(mean_behavior)
+            mean_behavior = norm_decay(mean_behavior,time_passed)
+        end
 
         #println("mean behavior is $mean_behavior")
         model.properties[:norms_message] == true && rand()>0.1 && (mean_behavior*=1.05)
