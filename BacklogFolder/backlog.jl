@@ -29,6 +29,7 @@ workplace_arr = exp_workplace.(wealth_data)
 plot(workplace_arr)
 using CurveFit
 ExpFit([10.0,100.0,200.0,300.0,500.0],[500.0,100.0,50.0,20.0,10.0])
+#function that takes wealth and gives workplace size. Apparentyl fitted with CurveFit and also random thing I added
 function exp_workplace(x)
     return (2990.168x^-0.7758731)-x/10+rand(0:(2*x/10))
 end
