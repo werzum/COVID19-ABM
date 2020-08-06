@@ -1,5 +1,5 @@
 function agent_week!(model, social_groups, distant_groups,steps)
-    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],daily_cases=Int32[])
+    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],daily_cases=Int32[],days_passed=Int32[])
     infected_timeline = Vector{Int32}(undef,0)
     infected_timeline_growth = Vector{Int32}(undef,0)
     #initialize the timline
@@ -10,7 +10,7 @@ function agent_week!(model, social_groups, distant_groups,steps)
         println("step $step")
         for i in 1:7
             model.days_passed+=1
-            send_messages(model.days_passed,attitude,norms)
+            #send_messages(model.days_passed,attitude,norms)
             #select social&distant active groups randomly, more agents are social active on the weekend
             if i < 6
                 social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
@@ -76,7 +76,7 @@ end
 function send_messages(day,attitude,norms)
     attitude_message_frequency = round(attitude_frequency(day,attitude))
     norm_message_frequency = round(norm_frequency(day,norms))
-    #println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms")
+    println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
     if day % attitude_message_frequency == 0
         println("sent attitude!!!")
         send_attitude()
@@ -104,17 +104,17 @@ function norm_frequency(day,norm)
 end
 
 
-function send_attitude()
+function send_norms()
     #slightly increase attitude by setting model parameter which influences norm calculation in agent behavior function
     model.properties[:norms_message] = true
 end
 
-function send_norms()
+function send_attitude()
     all_agents = collect(allagents(model))
     #remove 10% since 10% dont use media/think its not trustful in this respect (NDR report)
     selected_agents = rand(all_agents, Int32(round(length(all_agents)*0.9)))
     #slightly increase attitude
-    [agent.attitude=round(agent.attitude*1.05) for agent in selected_agents]
+    [agent.attitude=round(attitude_growth(agent.attitude) for agent in selected_agents]
 end
 
 function fear_growth(case_growth,personal_cases)
@@ -122,6 +122,12 @@ function fear_growth(case_growth,personal_cases)
     #us - unconditioned stimuli, cs - conditioned stimuli -> merge both to one stimuli, cases
     #return fear change of 1 if both rates are 1
     return Int16(round(100*1.58198*(1-ℯ^(-case_growth*personal_cases))))
+end
+
+function attitude_growth(attitude)
+    #scale the attitude to fit e
+    attitude_factor = scale(0,158,0,4,attitude)
+    return attitude*(1+ℯ^(-attitude_factor))
 end
 
 function fear_decay(fear,time)
@@ -147,6 +153,13 @@ end
 #add vor verification streek how infection prob grows with household size
 #fix data so that infected cases keep going up -> maybe just pass infected_timeline for infected? when last shows slow, steady grow we are done
 #,aybe higher threat perception for women as Perotta
+#VERIFY MODEL!!! VIsualize spread, show percentage men/women, where do most infections happen, etc -> need a valid model before
+#Infection travel wealth percentage public transport
+#fear growth is not governed by time. Maybe add in a simliar manner as fear decay as simple factor? Could be cool.
+#up and down in fear since fear decays only as long as 3x decay -> change this period or set it once on and then let it sit?
+#Is fear decay really behaving as intenden? First strong decay and then smaller? Or argue that this better for validation?
+#explain in methodolgy that workspace size is a function of wealth
+#MAYBE do fear growth similiar to attitude growth 
 
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
 
@@ -181,7 +194,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
 
             #if our route coincides with the daily route of others
             if (possible_edges>0)
-                agent.behavior > 100 ? risk = 3.73 : risk = 15.4
+                agent.behavior > 100 ? risk = 3.66 : risk = 9.5
                 #use agent wealth as additional factor
                 wealth_modificator = agent.wealth/219
                 wealth_modificator < 0.01 && (wealth_modificator = 0.01)
@@ -202,7 +215,11 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         #check which time of day it is, then calculate move infection if not in quarantine, and finally move the agent
         if time_of_day == :work && agent.workplace != 0
             #20% stay at home during covid contact prohibition
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && rand()<0.2
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && rand()<0.498
+                return
+            end
+            #schools close at the same time as workplaces and affect all pupils
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && (4 < agent.age <19)
                 return
             end
             #on the weekends, only ~20% go to work https://www.destatis.de/DE/Themen/Arbeit/Arbeitsmarkt/Qualitaet-Arbeit/Dimension-3/wochenendarbeitl.html
@@ -253,7 +270,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         mean_behavior = mean([agent.behavior for agent in node_agents])
 
         #println("mean behavior is $mean_behavior")
-        model.properties[:norms_message] == true && (mean_behavior*=1.05)
+        model.properties[:norms_message] == true && rand()>0.1 && (mean_behavior*=1.05)
 
         #get the agents attitude
         attitude = agent.attitude
@@ -390,8 +407,8 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         end
     end
 
-    #increase infection time
-    update!(agent, model) = in(agent.health_status, (:E,:IWS,:NQ,:Q,:M)) && (agent.days_infected +=1)
+    #increase infection time once per day for eligible agents
+    update!(agent, model) = time_of_day == :work && in(agent.health_status, (:E,:IWS,:NQ,:Q,:M, :HS)) && (agent.days_infected +=1)
 
     #transition agent to new state
     function recover_or_die!(agent, model)
@@ -414,11 +431,10 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             if rand()*agent.age/50<0.12
                 agent.health_status = :HS
             end
-        elseif (agent.health_status == :NQ || agent.health_status ==:IwS) && agent.days_infected == 14 #RKI Krankheitsverlauf zwei Wochen
-            #become immune again after being NQ,Q without heavy symptoms
+        elseif in(agent.health_status,(:NQ,:Q, :IwS)) && agent.days_infected == 14 #RKI Krankheitsverlauf zwei Wochen
+            #become immune again after being NQ,Q, without heavy symptoms
             agent.health_status == :M
-        elseif in(agent.health_status,(:HS,:Q)) && agent.days_infected == 9+10 #after RKI Durchschn. Zeitintervall Behandlung, Median 10 Tage nach Hospitalisierung
-            if agent.health_status == :HS
+        elseif agent.health_status == :HS && agent.days_infected == 9+10 #after RKI Durchschn. Zeitintervall Behandlung, Median 10 Tage nach Hospitalisierung
             #see if agent with heavy symptoms dies or recovers. Happens after three weeks as ? specifies
             #no age here, since we already used this for severe cases. Source RKI Steckbrief
                 if rand()<0.22
@@ -426,10 +442,6 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                 else
                     agent.health_status = :M
                 end
-            #become immune after these 19 days if only Q
-            else
-                agent.health_status = :M
-            end
         elseif agent.health_status == :M && agent.days_infected == 75 #become susceptible again after two-three months (Long 2020)
             agent.health_status = :S
         end
@@ -441,44 +453,35 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     susceptible(x) = count(i == :S for i in x)
     mean_sentiment(x) = Int64(round(mean(x)))
     data_to_collect = [(:health_status,infected),(:health_status,recovered),(:health_status,susceptible),(:behavior,mean_sentiment),(:fear,mean_sentiment)]
-    model_data_to_collect = [(:daily_cases)]
+    model_data_to_collect = [(:daily_cases),(:days_passed)]
 
     #preallocate some arrays
     aquaintances_vector = Vector{Int64}(undef, length(all_agents))
     #run the model - agents go to work, collect data
     time_of_day = :work
-    data1, data1_m = run!(model, move_step!, 1; adata = data_to_collect, mdata = model_data_to_collect )
-    data2, data2_m = run!(model, infect_step!, 1; adata = data_to_collect,mdata = model_data_to_collect)
+    run!(model, move_step!, 1)
+    run!(model, infect_step!, 1)
     #back home
     time_of_day = :back_work
-    data3, data3_m = run!(model, move_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
-    data4, data4_m = run!(model, infect_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
+    run!(model, move_step!,1)
+    run!(model, infect_step!,1)
 
     #if social/distant
     time_of_day = :social
-    data5, data5_m = run!(model, move_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
-    data6, data6_m = run!(model, infect_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
+    run!(model, move_step!,1)
+    run!(model, infect_step!,1)
 
-    #and back home
+    #and back home - collect data only here at the end of the day
     time_of_day = :back_social
-    data7, data7_m = run!(model, move_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
-    data8, data8_m = run!(model, infect_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
+    run!(model, move_step!,1)
+    data_a, data_m = run!(model, infect_step!,1; adata = data_to_collect,mdata = model_data_to_collect)
 
     #combine dfs,rename them appropriately and return them
-    data_m = vcat(data1_m,data2_m,data3_m,data4_m,data5_m,data6_m,data7_m,data8_m)
-    data_a = vcat(data1, data2, data3, data4, data5, data6, data7, data8)
-    data = hcat(data_a,data_m[:daily_cases])
-    rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:daily_cases])
+    data_m = select(data_m,Not(:step))
+    data = hcat(data_a,data_m)
+    deleterows!(data,1)
+    rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:daily_cases,:days_passed])
     return data
 end
 
 export agent_step!, agent_week!
-
-
-
-#agent_week!(model, social_groups, distant_groups,1)
-#
-# for i in 1:100
-#     agent = random_agent(model)
-#     agent.health_status = :I
-# end

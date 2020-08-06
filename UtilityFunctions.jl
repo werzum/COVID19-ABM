@@ -16,4 +16,10 @@ function reset_infected(model)
     model.properties[:days_passed] = 0
 end
 
-export add_infected,reset_infected
+function restart_model(agents,steps)
+    reset_infected(model)
+    add_infected(agents)
+    create_chart(steps)
+end
+
+export add_infected,reset_infected,restart_model
