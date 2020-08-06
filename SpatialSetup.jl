@@ -88,7 +88,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     undef_vector = LightGraphs.SimpleGraphs.SimpleEdge{Int64}[]
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(:S,0,0,0,0,0,false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector)
+        agent_properties[Int(x)] = agent_tuple(:S,0,0,0,0,0,0,false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector)
     end
 
     #randomly set women and young/old inhabitants
@@ -231,7 +231,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
         end
         agent_social_route = a_star(model.space.graph,agent.household,agent.socialgroup)
         agent_distant_route = a_star(model.space.graph,agent.household,agent.distantgroup)
-        add_agent!(agent.household, model, agent.health_status, agent.days_infected, agent.attitude, agent.fear, agent.behavior, agent.acquaintances_growth, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route)
+        add_agent!(agent.household, model, agent.health_status, agent.days_infected, agent.attitude, agent.original_attitude, agent.fear, agent.behavior, agent.acquaintances_growth, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route)
     end
     return
 end
@@ -368,6 +368,7 @@ mutable struct agent_tuple
     health_status::Symbol
     days_infected::Int8
     attitude::Int16
+    original_attitude::Int16
     fear::Int16
     behavior::Int16
     acquaintances_growth::Int32

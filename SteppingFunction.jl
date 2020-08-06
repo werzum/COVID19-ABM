@@ -10,7 +10,7 @@ function agent_week!(model, social_groups, distant_groups,steps)
         println("step $step")
         for i in 1:7
             model.days_passed+=1
-            #send_messages(model.days_passed,attitude,norms)
+            send_messages(model.days_passed,attitude,norms)
             #select social&distant active groups randomly, more agents are social active on the weekend
             if i < 6
                 social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
@@ -111,10 +111,7 @@ end
 
 function send_attitude()
     all_agents = collect(allagents(model))
-    #remove 10% since 10% dont use media/think its not trustful in this respect (NDR report)
-    selected_agents = rand(all_agents, Int32(round(length(all_agents)*0.9)))
-    #slightly increase attitude
-    [agent.attitude=round(attitude_growth(agent.attitude) for agent in selected_agents]
+    [agent.attitude = Int16(round(attitude_growth(agent.attitude))) for agent in all_agents]
 end
 
 function fear_growth(case_growth,personal_cases)
@@ -127,8 +124,25 @@ end
 function attitude_growth(attitude)
     #scale the attitude to fit e
     attitude_factor = scale(0,158,0,4,attitude)
+    #return it with an increase of max. 1.58
     return attitude*(1+ℯ^(-attitude_factor))
 end
+
+function attitude_decay(original_attitude, attitude)
+    unscaled_attitude=copy(attitude)
+    #scale both values and get the difference
+    original_attitude = scale(0,158,0,2,original_attitude)
+    attitude = scale(0,158,0,2,attitude)
+    difference = attitude-original_attitude
+    #decrease the attitude the bigger the difference
+    return round(unscaled_attitude*(ℯ^(-difference/2)))
+end
+
+function fear_decay(fear,time)
+    #modify fear so that it decays over time
+    return fear*ℯ^(-(time/200))
+end
+
 
 function fear_decay(fear,time)
     #modify fear so that it decays over time
@@ -159,7 +173,7 @@ end
 #up and down in fear since fear decays only as long as 3x decay -> change this period or set it once on and then let it sit?
 #Is fear decay really behaving as intenden? First strong decay and then smaller? Or argue that this better for validation?
 #explain in methodolgy that workspace size is a function of wealth
-#MAYBE do fear growth similiar to attitude growth 
+#MAYBE do fear growth similiar to attitude growth
 
 function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
 
@@ -272,8 +286,8 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         #println("mean behavior is $mean_behavior")
         model.properties[:norms_message] == true && rand()>0.1 && (mean_behavior*=1.05)
 
-        #get the agents attitude
-        attitude = agent.attitude
+        #get the agents attitude with our decay
+        attitude = attitude_decay(agent.original_attitude, agent.attitude)
 
         #get personal environment infected and compute a threat value
         #get #infected within agents environment
