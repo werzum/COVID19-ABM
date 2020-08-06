@@ -22,4 +22,9 @@ function restart_model(agents,steps)
     create_chart(steps)
 end
 
-export add_infected,reset_infected,restart_model
+#a nice function that scales input
+function scale(min_m,max_m,min_t,max_t,m)
+    return (m-min_m)/(max_m-min_m)*(max_t-min_t)+min_t
+end
+
+export add_infected,reset_infected,restart_model, scale
