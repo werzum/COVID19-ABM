@@ -350,10 +350,10 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
         end
         agent.behavior = new_behavior
 
-        if(agent.id == 10)
-            println("the fear is $(agent.fear), the time is $time, with a daily cases of $daily_cases")
-            println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior")
-        end
+        # if(in(agent.id,[10,200,350,400,500,600]))
+        #     println("the fear is $(agent.fear) a daily cases of $daily_cases")
+        #     println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior ols behavior $old_behavior")
+        # end
     end
 
     function transmit!(agent, model)

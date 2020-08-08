@@ -13,6 +13,7 @@ function draw_initial_map(model,lat,long)
         #set color for empty nodes and populated nodes
         b = [agent.workplace for agent in a]
         b = mean(b)
+
         #ncolor[i]=cgrad(:]inferno)[mean(b)/10]
         b==0 ? ncolor[i]=RGBA(1.0, 1.0, 1.0, 0.6) : ncolor[i]=RGBA(0.0, 0.6, 0.6, 0.8)
         length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
@@ -25,18 +26,25 @@ function draw_map(model,lat,long)
     N = Agents.nodes(model)
     ncolor = Vector(undef, length(N))
     nodesizevec = Vector(undef, length(N))
-    for (i, n) in enumerate(N)
-        a = get_node_agents(n, model)
+    for i in N
+        a = get_node_agents(i, model)
         #set color for empty nodes and populated nodes
         b = [agent.behavior for agent in a]
         b = mean(b)
-        alphas = b/158
-        #these colors still jump aournd weirdly
-        ncolor[i]=RGBA(1,0.8,0.8,alphas)
+        #catch empty nodes, scale others up to 256 colors and set the cgrad
+        isnan(b) && (b = 1)
+        b = scale(0,158,0,256,b)
+        #finding out that the input has to be an int or else it will turn mad took only like, 4 hours?
+        b = round(b)
+        b = Int16(b)
+        b == 0 && (b = 1)
+        b > 256 && (b = 256)
+        ncolor[i]=cgrad(:inferno)[b]
         #get infected agents
-        c = [in(i,(:E,:IwS,:Q,:NQ,:HS)) for i in a]
+        c = count(agent -> in(agent.health_status,(:E,:IwS,:Q,:NQ,:HS)),a)
         #set nodesize according to number of infected agents
-        length(a)==0 ? nodesizevec[i] = 1 : nodesizevec[i] = count(c)/10
+        length(a)==0 ? nodesizevec[i] = 0.5 : nodesizevec[i] = c
+        #b > 20 && println("for node $i color is $(ncolor[i]) while cgrad is $(cgrad(:inferno)[b]) with mean b $b and infected $(c)")
     end
     p = gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
     return p
@@ -98,8 +106,9 @@ end
 function create_gif(steps)
     #call agent week with paint_mode on
     plot_vector = agent_week!(model, social_groups, distant_groups,steps,true)
-    @manipulate for i in 1:length(plot_vector)
-            compose(plot_vector[i],(context(), Compose.text(0, -1, "Day $i", hcenter, vcenter)))
+    #and create an interactive chart that allows you to check the different stages.
+    @manipulate throttle = 0.5 for i in 1:length(plot_vector)
+            compose(plot_vector[i],(context(),Compose.text(0, -1, "Day $i", hcenter, vcenter)),(context(), rectangle(), fill("turquoise")))
     end
 end
 
@@ -110,3 +119,4 @@ savefig(a,"Graphics\\example_route.png")
 using Compose
 draw(PNG("Graphics\\example_route.png",16cm,16cm),a)
 =#
+set_default_graphic_size(30Plots.cm, 30Plots.cm)
