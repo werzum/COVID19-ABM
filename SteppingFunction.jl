@@ -1,4 +1,4 @@
-function agent_week!(model, social_groups, distant_groups,steps)
+function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
     agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],daily_cases=Int32[],days_passed=Int32[])
     infected_timeline = Vector{Int32}(undef,0)
     infected_timeline_growth = Vector{Int32}(undef,0)
@@ -6,8 +6,9 @@ function agent_week!(model, social_groups, distant_groups,steps)
     push!(infected_timeline,0)
     push!(infected_timeline_growth,100)
     attitude, norms = read_message_data()
+    #create a vector of plots if we want to create a GIF of the spread
+    paint_mode && (plot_vector = Vector{Compose.Context}(undef,0))
     for step in 1:steps
-        println("step $step")
         for i in 1:7
             model.days_passed+=1
             send_messages(model.days_passed,attitude,norms)
@@ -54,11 +55,14 @@ function agent_week!(model, social_groups, distant_groups,steps)
             println("at time $(model.days_passed)")
             #and add the data to the dataframe
             append!(agent_data,day_data)
+            #add the plot to the plot_vector if enabled
+            paint_mode && (push!(plot_vector,draw_map(model,lat,long)))
         end
         #reset norms message property in each case so that it can be reactived when needed
         model.properties[:norms_message] = false
     end
-    return agent_data
+    #return the data of the model if creating a chart and return plot vector if making a GIF
+    if paint_mode return plot_vector else return agent_data end
 end
 
 function read_message_data()
@@ -163,13 +167,9 @@ end
 
 #TODO
 #add vor verification streek how infection prob grows with household size
-#fix data so that infected cases keep going up -> maybe just pass infected_timeline for infected? when last shows slow, steady grow we are done
 #,aybe higher threat perception for women as Perotta
 #VERIFY MODEL!!! VIsualize spread, show percentage men/women, where do most infections happen, etc -> need a valid model before
 #Infection travel wealth percentage public transport
-#fear growth is not governed by time. Maybe add in a simliar manner as fear decay as simple factor? Could be cool.
-#up and down in fear since fear decays only as long as 3x decay -> change this period or set it once on and then let it sit?
-#Is fear decay really behaving as intenden? First strong decay and then smaller? Or argue that this better for validation?
 #explain in methodolgy that workspace size is a function of wealth
 #MAYBE do fear growth similiar to attitude growth
 
