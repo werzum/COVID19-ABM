@@ -1,4 +1,8 @@
-function draw_map(model,lat,long)
+using Printf
+using Reactive, Interact, Compose
+using Gadfly
+
+function draw_initial_map(model,lat,long)
     N = Agents.nodes(model)
     ncolor = Vector(undef, length(N))
     nodesizevec = Vector(undef, length(N))
@@ -13,7 +17,29 @@ function draw_map(model,lat,long)
         b==0 ? ncolor[i]=RGBA(1.0, 1.0, 1.0, 0.6) : ncolor[i]=RGBA(0.0, 0.6, 0.6, 0.8)
         length(a)==0 ? nodesizevec[i] = 2 : nodesizevec[i] = 3
     end
-    gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
+    p = gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
+    return p
+end
+
+function draw_map(model,lat,long)
+    N = Agents.nodes(model)
+    ncolor = Vector(undef, length(N))
+    nodesizevec = Vector(undef, length(N))
+    for (i, n) in enumerate(N)
+        a = get_node_agents(n, model)
+        #set color for empty nodes and populated nodes
+        b = [agent.behavior for agent in a]
+        b = mean(b)
+        alphas = b/158
+        #these colors still jump aournd weirdly
+        ncolor[i]=RGBA(1,0.8,0.8,alphas)
+        #get infected agents
+        c = [in(i,(:E,:IwS,:Q,:NQ,:HS)) for i in a]
+        #set nodesize according to number of infected agents
+        length(a)==0 ? nodesizevec[i] = 1 : nodesizevec[i] = count(c)/10
+    end
+    p = gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
+    return p
 end
 
 #paint the edges of edgecolor red for all edges in the route
@@ -60,7 +86,7 @@ end
 
 function create_chart(steps)
     #one step is a week!
-    b = agent_week!(model, social_groups, distant_groups,steps)
+    b = agent_week!(model, social_groups, distant_groups,steps,false)
     p = plot(b.infected,label="infected")
     plot!(p,b.susceptible,label="susceptible")
     plot!(p,b.recovered,label="recovered")
@@ -69,15 +95,12 @@ function create_chart(steps)
     plot!(p,b.daily_cases,label="daily cases")
 end
 
-function create_gif()
-    properties = [:status, :pos]
-    #plot the ith step of the simulation
-    anim = @animate for i ∈ 1:50
-        data = step!(model, agent_step!, 1, properties)
-        p = plot2D(data, :status, nodesize=3)
-        title!(p, "Day $(i)")
+function create_gif(steps)
+    #call agent week with paint_mode on
+    plot_vector = agent_week!(model, social_groups, distant_groups,steps,true)
+    @manipulate for i in 1:length(plot_vector)
+            compose(plot_vector[i],(context(), Compose.text(0, -1, "Day $i", hcenter, vcenter)))
     end
-    gif(anim, "Graphics\\covid_evolution.gif", fps = 3);
 end
 
 export draw_map,draw_route,create_chart, create_gif
