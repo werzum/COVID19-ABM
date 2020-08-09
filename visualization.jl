@@ -40,7 +40,7 @@ function draw_map(model,lat,long)
         b == 0 && (b = 1)
         b > 256 && (b = 256)
         ncolor[i]=cgrad(:inferno)[b]
-        #get infected agents
+        #get infected agents#
         c = count(agent -> in(agent.health_status,(:E,:IwS,:Q,:NQ,:HS)),a)
         #set nodesize according to number of infected agents
         length(a)==0 ? nodesizevec[i] = 0.5 : nodesizevec[i] = c
@@ -95,7 +95,7 @@ end
 function create_chart(steps)
     #one step is a week!
     b = agent_week!(model, social_groups, distant_groups,steps,false)
-    p = plot(b.infected,label="infected")
+    p = Plots.plot(b.infected_adjusted,label="infected")
     plot!(p,b.susceptible,label="susceptible")
     plot!(p,b.recovered,label="recovered")
     plot!(p,b.mean_fear.*100,label="fear")

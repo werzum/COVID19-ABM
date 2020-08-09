@@ -1,5 +1,5 @@
 function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
-    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],daily_cases=Int32[],days_passed=Int32[])
+    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],daily_cases=Int32[],days_passed=Int32[],infected_adjusted=Int64[])
     infected_timeline = Vector{Int32}(undef,0)
     infected_timeline_growth = Vector{Int32}(undef,0)
     #initialize the timline
@@ -211,8 +211,10 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
                 wealth_modificator = agent.wealth/219
                 wealth_modificator < 0.01 && (wealth_modificator = 0.01)
                 wealth_modificator > 1.9 && (wealth_modificator = 1.9)
-                #risk increases when agent
+                #risk increases when agentf
                 risk=risk*(2-wealth_modificator)
+                #test for adjusting infection frequencys
+                risk = risk*0.69
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts and /10 for scale
                 if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
                     agent.health_status = :E
@@ -379,6 +381,9 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
             rate = 0.163
         end
 
+        #test for infeciton curve
+        rate = rate*0.69
+
         #infect the number of contacts and then return
         #get node of agent, skip if only him
         node_contents = get_node_contents(agent.pos, model)
@@ -502,8 +507,10 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     data_m = select(data_m,Not(:step))
     data = hcat(data_a,data_m)
     deleterows!(data,1)
-    rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:daily_cases,:days_passed])
+    #add the daily cases since this is an accurate count of the new infections today
+    data = hcat(data,DataFrame(infected_adjusted=last(infected_timeline)))
+    DataFrames.rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:daily_cases,:days_passed,:infected_adjusted])
     return data
 end
 
-export agent_step!, agent_week!
+export agent_week!
