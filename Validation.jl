@@ -21,15 +21,17 @@ function validate_fear(steps)
     csv_raw.x = [round(parse(Float16,replace(x,","=>"."))) for x in csv_raw.x]
     csv_raw.y = [round(parse(Float16,replace(x,","=>"."))) for x in csv_raw.y]
     sort(csv_raw,:x)
+    #prepend some data as guess for the trend
+    fear_yougov_prepend = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,3,6,9,14,18,21,25,28,31]
     #try to delete row 3, doesnt work so far.
     csv_raw = csv_raw[setdiff(1:end, 3), :]
     #parse the strings to Float16s
     #starting at the 16.03.
     #adding the missing month, since the graph only starts from the 16.03. and not as the model the 14.02.
-    fear_yougov = vcat([0 for i in 1:30],csv_raw.y)
+    fear_yougov = vcat(fear_yougov_prepend,csv_raw.y)
+    #using normal fear since fear over 100 isnt consistent at all
     fear_model = b.mean_fear
-    #maybe use percentage of agents with fear>100?
-    println("rmse is $(rmse(fear_yougov,fear_model))")
+    println("rmse is $(rmse(fear_yougov[1:steps*7],fear_model[1:steps*7]))")
     Plots.plot(fear_yougov,label="fear_yougov")
     plot!(fear_model,label="fear_model")
 end
