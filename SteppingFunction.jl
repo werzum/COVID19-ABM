@@ -1,5 +1,5 @@
 function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
-    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],daily_cases=Int32[],days_passed=Int32[],infected_adjusted=Int64[])
+    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],behavior=Float32[],fear_over=Float32[],daily_cases=Int32[],days_passed=Int32[],infected_adjusted=Int64[])
     infected_timeline = Vector{Int32}(undef,0)
     infected_timeline_growth = Vector{Int32}(undef,0)
     #initialize the timline
@@ -479,7 +479,11 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     recovered(x) = count(in(i,(:M,:D)) for i in x)
     susceptible(x) = count(i == :S for i in x)
     mean_sentiment(x) = Int64(round(mean(x)))
-    data_to_collect = [(:health_status,infected),(:health_status,recovered),(:health_status,susceptible),(:behavior,mean_sentiment),(:fear,mean_sentiment)]
+    #get percentage of agents with behavior and fear > 100
+    behavior(x) = count(i>=100 for i in x)/nagents(model)*100
+    fear_over(x) = count(i>=100 for i in x)/nagents(model)*100
+
+    data_to_collect = [(:health_status,infected),(:health_status,recovered),(:health_status,susceptible),(:behavior,mean_sentiment),(:fear,mean_sentiment),(:behavior,behavior),(:fear,fear_over)]
     model_data_to_collect = [(:daily_cases),(:days_passed)]
 
     #preallocate some arrays
@@ -509,7 +513,7 @@ function agent_day!(model, social_active_group, distant_active_group,infected_ed
     deleterows!(data,1)
     #add the daily cases since this is an accurate count of the new infections today
     data = hcat(data,DataFrame(infected_adjusted=last(infected_timeline)))
-    DataFrames.rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:daily_cases,:days_passed,:infected_adjusted])
+    DataFrames.rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:behavior,:fear_over,:daily_cases,:days_passed,:infected_adjusted])
     return data
 end
 
