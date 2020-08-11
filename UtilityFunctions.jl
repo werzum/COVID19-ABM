@@ -23,7 +23,7 @@ function restart_model(agents,steps)
 end
 
 #a nice function that scales input
-function scale(min_m,max_m,min_t,max_t,m)
+@everywhere function scale(min_m,max_m,min_t,max_t,m)
     return (m-min_m)/(max_m-min_m)*(max_t-min_t)+min_t
 end
 

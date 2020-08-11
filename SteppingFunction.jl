@@ -1,4 +1,4 @@
-function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
+@everywhere function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
     agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],behavior=Float32[],fear_over=Float32[],daily_cases=Int32[],days_passed=Int32[],infected_adjusted=Int64[])
     infected_timeline = Vector{Int32}(undef,0)
     infected_timeline_growth = Vector{Int32}(undef,0)
@@ -65,7 +65,7 @@ function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
     if paint_mode return plot_vector else return agent_data end
 end
 
-function read_message_data()
+@everywhere function read_message_data()
     rawdata_attitude = CSV.read("SourceData\\attitude.csv")
     #remove the first month so we start at the 14.02.2020 (16 cases in all of germany), no news found until then
     rawdata_attitude = rawdata_attitude[31:end,:]
@@ -77,7 +77,7 @@ function read_message_data()
     return attitude, norms
 end
 
-function send_messages(day,attitude,norms)
+@everywhere function send_messages(day,attitude,norms)
     attitude_message_frequency = round(attitude_frequency(day,attitude))
     norm_message_frequency = round(norm_frequency(day,norms))
     println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
@@ -91,7 +91,7 @@ function send_messages(day,attitude,norms)
     end
 end
 
-function attitude_frequency(day,attitude)
+@everywhere function attitude_frequency(day,attitude)
     #send at least every ten days and at most each day a message
     value = 10-attitude[day]*1000
     value < 1 && (value = 1)
@@ -99,7 +99,7 @@ function attitude_frequency(day,attitude)
     return value
 end
 
-function norm_frequency(day,norm)
+@everywhere function norm_frequency(day,norm)
     #send at least every ten days and at most each day a message
     value = round(10-norm[day]*1/3)
     value < 1 && (value = 1)
@@ -107,31 +107,32 @@ function norm_frequency(day,norm)
     return value
 end
 
-function send_norms()
+@everywhere function send_norms()
     #slightly increase attitude by setting model parameter which influences norm calculation in agent behavior function
     model.properties[:norms_message] = model.days_passed
 end
 
-function send_attitude()
+@everywhere function send_attitude()
     all_agents = collect(allagents(model))
     [agent.attitude = Int16(round(property_growth(agent.attitude))) for agent in all_agents]
 end
 
-function fear_growth(case_growth,personal_cases)
+@everywhere function fear_growth(case_growth,personal_cases)
     #lambda = max attainable fear factor -> 2?
     #us - unconditioned stimuli, cs - conditioned stimuli -> merge both to one stimuli, cases
     #return fear change of 1 if both rates are 1
     return Int16(round(100*1.58198*(1-ℯ^(-case_growth*personal_cases))))
 end
 
-function property_growth(property)
+@everywhere function property_growth(property)
     #scale the attitude to fit e
     property_factor = scale(0,158,0,4,property)
     #return it with an increase of max. 1.58
     return property*(1+ℯ^(-property_factor))
 end
 
-function attitude_decay(original_attitude, attitude)
+@everywhere function attitude_decay(original_attitude, attitude)
+    #has to decay back to regular attitude value
     unscaled_attitude=copy(attitude)
     #scale both values and get the difference
     original_attitude = scale(0,158,0,2,original_attitude)
@@ -141,17 +142,17 @@ function attitude_decay(original_attitude, attitude)
     return round(unscaled_attitude*(ℯ^(-difference/2)))
 end
 
-function norm_decay(norm,time)
-    #modify fear so that it decays over time
+@everywhere function norm_decay(norm,time)
+    #modify norms so that it decays over time
     return norm*ℯ^(-(time/300))
 end
 
-function fear_decay(fear,time)
+@everywhere function fear_decay(fear,time)
     #modify fear so that it decays over time
     return fear*ℯ^(-(time/200))
 end
 
-function case_growth(today,before)
+@everywhere function case_growth(today,before)
     if !in(0,(today,before))
         return Int16(round(100*(today/before)))
     else
@@ -160,7 +161,7 @@ function case_growth(today,before)
 end
 
 #mossong 2008, contacts by age,
-function contacts_reworked(input)
+@everywhere function contacts_reworked(input)
     y = 11.17771 + 0.5156303*input - 0.01447889*input^2 + 0.00009245592*input^3
     return y
 end
@@ -172,8 +173,10 @@ end
 #Infection travel wealth percentage public transport
 #explain in methodolgy that workspace size is a function of wealth
 #MAYBE do fear growth similiar to attitude growth
+#validation RMSE sometimes returns inf. why u do dis?
+#verlängern/verlangsamung des Abfalls der Message-Kurven
 
-function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
+@everywhere function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
 
     #put functions within parent scope so we can read from this scope
     function move_infect!(agent)

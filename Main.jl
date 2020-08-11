@@ -1,6 +1,5 @@
-using Agents, Random, DataFrames, LightGraphs
-using CSV
-using Plots
+using Distributed
+using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 
 #TODO map is unweighted so far, could add wheights but then have to
 #TODO could clear the warnings about changed uses of filter, csv read and filter
@@ -14,7 +13,7 @@ include("Validation.jl")#exports nothing so far
 include("SteppingFunction.jl")#exports agent_week!
 
 #agent and params setup
-mutable struct DemoAgent <: AbstractAgent
+@everywhere mutable struct DemoAgent <: AbstractAgent
     id::Int
     pos::Int
     health_status::Symbol #reflects the SIR extended states (Susceptible, Exposed, Infected, InfectedWitoutSymptpms, NotQuarantined, Quarantined, Dead, Immune)
@@ -52,7 +51,16 @@ parameters = Dict(
             :days_passed => 0)
 
 #initialize the model and generate the map - takes about 115s for 13.000 agents
-model,lat,long,social_groups,distant_groups = setup(parameters)
+model,lat,long, social_groups, distant_groups = setup(parameters)
+#add workers and make the packages available for all of them
+addprocs(7)
+@everywhere using Agents, Random, DataFrames, LightGraphs, CSV, Plots
+@everywhere using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor, LightGraphs, OpenStreetMapX
+include("UtilityFunctions.jl")# exports add_infected(number),reset_infected(model)
+#make important data available as well
+@eval @everywhere model = $model
+@eval @everywhere social_groups = $social_groups
+@eval @everywhere distant_groups = $distant_groups
 
 #step the model X times - each step takes about Xs
 
