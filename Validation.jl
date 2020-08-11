@@ -1,4 +1,4 @@
-function validate_infected(steps)
+@everywhere function validate_infected(steps)
     reset_infected(model)
     add_infected(1)
     b = agent_week!(model, social_groups, distant_groups,steps,false)
@@ -39,4 +39,11 @@ end
 function rmse(series1,series2)
     errors = [(series1[i]-series2[i])^2 for i in 1:length(series2)]
     rmse = sqrt(mean(errors))
+end
+
+function test_multi(model,social_groups,distant_groups,steps,replicates)
+    all_data = pmap(j -> agent_week!(deepcopy(model),social_groups,distant_groups,steps,false),
+                    1:replicates)
+    print(all_data)
+    #a = agent_week!(deepcopy(model),social_groups,distant_groups,steps,false)
 end

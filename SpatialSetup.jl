@@ -1,9 +1,4 @@
-using LightGraphs
-using OpenStreetMapX
-using GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor
-using Distributed
-using DataFramesMeta
-using StatsBase, Distributions, Statistics
+using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor, LightGraphs, OpenStreetMapX
 
 function create_node_map()
     #OSM is obtained best from https://protomaps.com/extracts/b6fd95e9-cb6b-40b7-b58b-acbead2e2643 for easy node selection
