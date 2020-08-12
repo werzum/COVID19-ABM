@@ -53,11 +53,34 @@ parameters = Dict(
 #initialize the model and generate the map - takes about 115s for 13.000 agents
 model,lat,long, social_groups, distant_groups = setup(parameters)
 #add workers and make the packages available for all of them
-addprocs(7)
+addprocs(9)
+
 @everywhere using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 @everywhere using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor, LightGraphs, OpenStreetMapX
 include("UtilityFunctions.jl")# exports add_infected(number),reset_infected(model)
-#make important data available as well
+include("SteppingFunction.jl")#exports agent_week!
+#make important data available as well - eval evaluates expression on global scope, everywhere makes it available for all workers, what does $do?
+@everywhere mutable struct DemoAgent <: AbstractAgent
+    id::Int
+    pos::Int
+    health_status::Symbol #reflects the SIR extended states (Susceptible, Exposed, Infected, InfectedWitoutSymptpms, NotQuarantined, Quarantined, Dead, Immune)
+    days_infected::Int16
+    attitude::Int16
+    original_attitude::Int16
+    fear::Int16
+    behavior::Int16
+    acquaintances_growth::Int32
+    women::Bool
+    age::Int8
+    wealth::Int16
+    household::Int32
+    workplace::Int32
+    socialgroup::Int32
+    distantgroup::Int32
+    workplaceroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
+    socialroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
+    distantroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
+end
 @eval @everywhere model = $model
 @eval @everywhere social_groups = $social_groups
 @eval @everywhere distant_groups = $distant_groups

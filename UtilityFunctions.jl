@@ -16,6 +16,12 @@ function reset_infected(model)
     model.properties[:days_passed] = 0
 end
 
+function reset_model_parallel(agents)
+    reset_infected(model)
+    add_infected(agents)
+    @eval @everywhere model = $model
+end
+
 function restart_model(agents,steps)
     reset_infected(model)
     add_infected(agents)
@@ -27,4 +33,4 @@ end
     return (m-min_m)/(max_m-min_m)*(max_t-min_t)+min_t
 end
 
-export add_infected,reset_infected,restart_model, scale
+export add_infected,reset_infected,restart_model, scale, reset_model_parallel

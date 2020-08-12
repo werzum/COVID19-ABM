@@ -41,9 +41,30 @@ function rmse(series1,series2)
     rmse = sqrt(mean(errors))
 end
 
-function test_multi(model,social_groups,distant_groups,steps,replicates)
-    all_data = pmap(j -> agent_week!(deepcopy(model),social_groups,distant_groups,steps,false),
-                    1:replicates)
-    print(all_data)
-    #a = agent_week!(deepcopy(model),social_groups,distant_groups,steps,false)
+function run_multiple(model,social_groups,distant_groups,steps,replicates)
+    #reset the model for all workers and add 1 infected to it
+    reset_model_parallel(1)
+    #collect all data in one dataframe
+    all_data = pmap(j -> agent_week!(deepcopy(model),social_groups,distant_groups,steps,false), 1:replicates)
+
+    # Infection rate/risk (base value for both, *0.5:0.1:1.5
+    # Behavior treshold, as factor(or. 100) *50:10:150
+    # Fear Growth, as factor(or. 100) *50:10:150
+    # Fear Decay, as factor(or. 100) *50:10:150
+    # Factor of fear on the behavior, *0.5:0.1:1.5
+    # Message Influence, norms and attitude growth, *50:10:150
+    # Attitude, Norm, decay, *50:10:150
+
+    #get the data and average it
+    infected = Array{Int32}(undef,steps*7)
+    for elm in all_data
+        infected = hcat(infected,elm.infected_adjusted)
+    end
+    infected = infected[:,setdiff(1:end,1)]
+    #plot all results so we have an idea
+    display(Plots.plot(infected,label="infected"))
+    infected = mean(infected,dims=2)
+    #and return the last value, which represents the total number of infected
+    print(infected)
+    return last(infected)
 end
