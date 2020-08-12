@@ -25,8 +25,8 @@
             infected_edges = Vector{Int32}(undef,0)
             #to avoid costly recomputation in behavior, we collect all agents once and then use it in behavior
             all_agents = collect(allagents(model))
-            println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
-            println("mean fear is $(mean([agent.fear for agent in all_agents]))")
+            #println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
+            #println("mean fear is $(mean([agent.fear for agent in all_agents]))")
 
             #run the model
             day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
@@ -50,9 +50,9 @@
             #delay the reported infections by two days as Verzug COronadaten shows https://www.ndr.de/nachrichten/info/Coronavirus-Neue-Daten-stellen-Epidemie-Verlauf-infrage,corona2536.html
             #nowcast shows 3 days delay and 10% less infected as report delay
             length(infected_timeline)<4 ? model.infected_reported=last(infected_timeline)*0.9 : model.infected_reported = infected_timeline[length(infected_timeline)-3]
-            println("infected timeline is $infected_timeline")
-            println("infected growth is $infected_timeline_growth")
-            println("at time $(model.days_passed)")
+            #println("infected timeline is $infected_timeline")
+            #println("infected growth is $infected_timeline_growth")
+            #println("at time $(model.days_passed)")
             #and add the data to the dataframe
             append!(agent_data,day_data)
             #add the plot to the plot_vector if enabled
@@ -66,11 +66,11 @@
 end
 
 @everywhere function read_message_data()
-    rawdata_attitude = CSV.read("SourceData\\attitude.csv")
+    rawdata_attitude = DataFrame!(CSV.File("SourceData\\attitude.csv"))
     #remove the first month so we start at the 14.02.2020 (16 cases in all of germany), no news found until then
     rawdata_attitude = rawdata_attitude[31:end,:]
     attitude = rawdata_attitude.Value
-    rawdata_norms = CSV.read("SourceData\\norms.csv")
+    rawdata_norms = DataFrame!(CSV.File("SourceData\\norms.csv"))
     rawdata_norms = rawdata_norms[41:end,:]
     norms = rawdata_norms.Value
     norms_data = rawdata_norms.Date
@@ -80,7 +80,7 @@ end
 @everywhere function send_messages(day,attitude,norms)
     attitude_message_frequency = round(attitude_frequency(day,attitude))
     norm_message_frequency = round(norm_frequency(day,norms))
-    println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
+    #println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
     if day % attitude_message_frequency == 0
         println("sent attitude!!!")
         send_attitude()
@@ -217,7 +217,7 @@ end
                 #risk increases when agentf
                 risk=risk*(2-wealth_modificator)
                 #test for adjusting infection frequencys
-                risk = risk*0.69
+                risk = risk*0.6
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts and /10 for scale
                 if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
                     agent.health_status = :E
@@ -373,7 +373,7 @@ end
         prop = model.properties
 
         #mean rate Chu 2020 f
-        rate = if agent.behavior > 100
+        risk = if agent.behavior > 100
             print
             0.0366
         else
@@ -381,12 +381,11 @@ end
         end
         #rate of secondary infections in household very high, Wei Li 2020, but at least contained to household
         if agent.health_status == :Q
-            rate = 0.163
+            risk = 0.163
         end
 
         #test for infeciton curve
-        rate = rate*0.69
-
+        risk = risk*0.6
         #infect the number of contacts and then return
         #get node of agent, skip if only him
         node_contents = get_node_contents(agent.pos, model)
@@ -415,7 +414,7 @@ end
 
         contacts < 0 && return
         #draw from bernoulli distribution with infection rate and average number of contacts according to age.
-        infect_people = countmap(rand(Bernoulli(rate),Int32(round(contacts))))[1]
+        infect_people = countmap(rand(Bernoulli(risk),Int32(round(contacts))))[1]
         #check if there are no people to infect
         infect_people  == 0 && return
         #if we have drawn more people than available, set infect_people to all other agents
@@ -468,7 +467,7 @@ end
             #see if agent with heavy symptoms dies or recovers. Happens after three weeks as ? specifies
             #no age here, since we already used this for severe cases. Source RKI Steckbrief
                 if rand()<0.22
-                    kill_agent!(agent, model)
+                    agent.health_status = :D
                 else
                     agent.health_status = :M
                 end
