@@ -20,7 +20,7 @@ include("SteppingFunction.jl")#exports agent_week!
     days_infected::Int16
     attitude::Int16
     original_attitude::Int16
-    fear::Int16
+    fear::Float32
     behavior::Int16
     acquaintances_growth::Int32
     women::Bool
@@ -53,7 +53,7 @@ parameters = Dict(
 #initialize the model and generate the map - takes about 115s for 13.000 agents
 model,lat,long, social_groups, distant_groups = setup(parameters)
 #add workers and make the packages available for all of them
-addprocs(9)
+addprocs(7)
 
 @everywhere using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 @everywhere using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor, LightGraphs, OpenStreetMapX
@@ -67,7 +67,7 @@ include("SteppingFunction.jl")#exports agent_week!
     days_infected::Int16
     attitude::Int16
     original_attitude::Int16
-    fear::Int16
+    fear::Float32
     behavior::Int16
     acquaintances_growth::Int32
     women::Bool
@@ -88,4 +88,4 @@ end
 #step the model X times - each step takes about Xs
 
 #Plot map
-draw_map(model,lat,long)
+#draw_map(model,lat,long)
