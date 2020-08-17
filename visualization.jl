@@ -95,7 +95,7 @@ end
 function create_chart(steps)
     #one step is a week!
     b = agent_week!(model, social_groups, distant_groups,steps,false)
-    p = Plots.plot(b.infected_adjusted,label="infected")
+    p = Plots.plot(b.infected,label="infected")
     plot!(p,b.susceptible,label="susceptible")
     plot!(p,b.recovered,label="recovered")
     plot!(p,b.mean_fear.*100,label="fear")

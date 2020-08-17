@@ -365,7 +365,7 @@ mutable struct agent_tuple
     days_infected::Int8
     attitude::Int16
     original_attitude::Int16
-    fear::Int16
+    fear::Float32
     behavior::Int16
     acquaintances_growth::Int32
     women::Bool
