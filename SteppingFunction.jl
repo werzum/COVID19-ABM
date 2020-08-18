@@ -121,7 +121,7 @@ end
     #lambda = max attainable fear factor -> 2?
     #us - unconditioned stimuli, cs - conditioned stimuli -> merge both to one stimuli, cases
     #return fear change of 1 if both rates are 1
-    return Int16(round(100*1.2*(1-ℯ^(-case_growth*personal_cases))))
+    return Int16(round(100*1.3*(1-ℯ^(-case_growth*personal_cases))))
 end
 
 @everywhere function property_growth(property)
@@ -149,7 +149,7 @@ end
 
 @everywhere function fear_decay(fear,time)
     #modify fear so that it decays over time
-    #return fear*ℯ^(-(time/200))
+    #return fear*ℯ^(-(time/250))
     return (fear-0.5)
 end
 
@@ -333,7 +333,7 @@ end
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
         #and apply the exponential decay to it after two weeks and we didnt have growth for three days
 
-        if model.properties[:days_passed] > 30 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 105,trues(3))
+        if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 105,trues(3))
             agent.fear = Int16(round(fear_decay(agent.fear, time)))
         end
 
