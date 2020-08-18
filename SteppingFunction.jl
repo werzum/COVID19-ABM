@@ -50,9 +50,9 @@
             #delay the reported infections by two days as Verzug COronadaten shows https://www.ndr.de/nachrichten/info/Coronavirus-Neue-Daten-stellen-Epidemie-Verlauf-infrage,corona2536.html
             #nowcast shows 3 days delay and 10% less infected as report delay
             length(infected_timeline)<4 ? model.infected_reported=last(infected_timeline)*0.9 : model.infected_reported = infected_timeline[length(infected_timeline)-3]
-            println("infected timeline is $infected_timeline")
-            println("infected growth is $infected_timeline_growth")
-            #println("at time $(model.days_passed)")
+            # println("infected timeline is $infected_timeline")
+            # println("infected growth is $infected_timeline_growth")
+            # println("at time $(model.days_passed)")
             #and add the data to the dataframe
             append!(agent_data,day_data)
             #add the plot to the plot_vector if enabled
@@ -80,7 +80,7 @@ end
 @everywhere function send_messages(day,attitude,norms)
     attitude_message_frequency = round(attitude_frequency(day,attitude))
     norm_message_frequency = round(norm_frequency(day,norms))
-    #println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
+    println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
     if day % attitude_message_frequency == 0
         #println("sent attitude!!!")
         send_attitude()
@@ -121,8 +121,7 @@ end
     #lambda = max attainable fear factor -> 2?
     #us - unconditioned stimuli, cs - conditioned stimuli -> merge both to one stimuli, cases
     #return fear change of 1 if both rates are 1
-    growth = (100*1.4*(1-ℯ^(-case_growth*personal_cases)))
-    return growth
+    return Int16(round(100*1.2*(1-ℯ^(-case_growth*personal_cases))))
 end
 
 @everywhere function property_growth(property)
@@ -145,16 +144,13 @@ end
 
 @everywhere function norm_decay(norm,time)
     #modify norms so that it decays over time
-    return norm*(1-ℯ^(-(time/300)))
+    return norm*ℯ^(-(time/300))
 end
 
 @everywhere function fear_decay(fear,time)
     #modify fear so that it decays over time
-    #return attitude_decay(40,fear)
-    decay = fear*(1-ℯ^(-time/10))
-    fear - decay < 0.4 && (decay = fear - 0.4)
-    decay < 0 && (decay = 0)
-    return decay
+    #return fear*ℯ^(-(time/200))
+    return (fear-0.5)
 end
 
 @everywhere function case_growth(today,before)
@@ -214,7 +210,7 @@ end
 
             #if our route coincides with the daily route of others
             if (possible_edges>0)
-                agent.behavior > 70 ? risk = 3.66 : risk = 9.5
+                agent.behavior > 100 ? risk = 3.66 : risk = 9.5
                 #use agent wealth as additional factor
                 wealth_modificator = agent.wealth/219
                 wealth_modificator < 0.01 && (wealth_modificator = 0.01)
@@ -234,7 +230,6 @@ end
     end
 
     function move_step!(agent, model)
-        agent.health_status == :D && return
         #check which time of day it is, then calculate move infection if not in quarantine, and finally move the agent
         if time_of_day == :work && agent.workplace != 0
             #20% stay at home during covid contact prohibition
@@ -273,16 +268,10 @@ end
             #move back home
             move = move_infect!(agent)
             move == true && move_agent!(agent,agent.household,model)
-            #quarantine this agent if he is in household with other quarantined agent
-            node_agents = get_node_agents(agent.pos, model)
-            if(length(filter(x->x.health_status==:Q,node_agents)))>0
-                agent.health_status = :Q
-            end
         end
     end
 
     function infect_step!(agent, model)
-        agent.health_status == :D && return
         behavior!(agent,model)
         transmit!(agent,model)
         update!(agent,model)
@@ -309,63 +298,67 @@ end
         end
 
         #println("mean behavior is $mean_behavior")
-        #model.properties[:norms_message] == true && rand()>0.1 && (mean_behavior*=1.05)
+        model.properties[:norms_message] == true && rand()>0.1 && (mean_behavior*=1.05)
 
         #get the agents attitude with our decay
         attitude = attitude_decay(agent.original_attitude, agent.attitude)
 
-        #if cases are plateauing
-        if (model.properties[:days_passed] > 42 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 110,trues(3)))
-            #println("fear before $(agent.fear)")
-            time = length(infected_timeline_growth)
-            agent.fear = fear_decay(agent.fear, time)
-            #println("fear after $(agent.fear)")
+        #get personal environment infected and compute a threat value
+        #get #infected within agents environment
+        acquaintances_infected = length(filter(x -> in(x.health_status, (:NQ,:Q,:HS)) && (x.household == agent.household || x.workplace == agent.workplace || x.socialgroup == agent.socialgroup || x.distantgroup == agent.distantgroup),all_agents))
+
+        if acquaintances_infected == 0 || model.infected_reported == 0
+            acquaintances_infected = 1
+        end
+        #add them as a modifier to the fear rate
+        if agent.acquaintances_growth != 0
+            #get the growth rate of infected
+            growth = acquaintances_infected/agent.acquaintances_growth
+            agent.acquaintances_growth = acquaintances_infected
         else
-            #in the growth phase, collect acquaintances
-            acquaintances_infected = length(filter(x -> in(x.health_status, (:NQ,:Q,:HS)) && (x.household == agent.household || x.workplace == agent.workplace || x.socialgroup == agent.socialgroup || x.distantgroup == agent.distantgroup),all_agents))
+            growth = 1
+        end
 
-            if acquaintances_infected == 0 || model.infected_reported == 0
-                acquaintances_infected = 1
-            end
+        #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
+        #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
+        #infected_growth = last(infected_timeline_growth)/50
+        if length(infected_timeline)>1
+            daily_cases = infected_timeline[end] - infected_timeline[end-1]
+        else
+            daily_cases = infected_timeline[end]
+        end
+        daily_cases/=200
+        acquaintances_infected_now = acquaintances_infected/15
+        agent.fear = fear_growth(daily_cases,acquaintances_infected_now)
+        time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
+        #and apply the exponential decay to it after two weeks and we didnt have growth for three days
 
-            #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
-            #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
-            #infected_growth = last(infected_timeline_growth)/50
-            if length(infected_timeline)>1
-                daily_cases = infected_timeline[end] - infected_timeline[end-1]
-            else
-                daily_cases = infected_timeline[end]
-            end
-            daily_cases/=200
-            acquaintances_infected_now = acquaintances_infected/15
-            agent.fear = (fear_growth(daily_cases,acquaintances_infected_now))
+        if model.properties[:days_passed] > 30 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 105,trues(3))
+            agent.fear = Int16(round(fear_decay(agent.fear, time)))
         end
 
         #agent behavior is computed as (norm + attitude)/2 + decay(threat)
         old_behavior = agent.behavior
         #reduced influence of fear so that messages can take over when due
-        new_behavior = mean([mean_behavior,attitude])*(agent.fear/35)
+        new_behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/110)))
 
         #catch the Initialization of behavior
         old_behavior == 0 && (old_behavior = new_behavior)
-
         #check boundaries
         #(new_behavior < 0 || new_behavior > 200) && (new_behavior=60)
         #prevent new behavior from jumping around too fast, a one-day stall in infection could reduce behavior too strong
+
         if new_behavior>old_behavior*1.4
             #round up to prevent behavior getting stuck at 1 for initially small increments
             new_behavior = Int16(ceil(old_behavior*1.4))
         elseif new_behavior < old_behavior*0.9
             new_behavior = Int16(ceil(old_behavior*0.9))
         end
-        agent.behavior = ceil(new_behavior)
-
-        #agent.behavior>100 && (print("behavuir is $(agent.behavior) with $daily_cases daily cases and acquaintances_infected_now $acquaintances_infected_now"))
+        agent.behavior = new_behavior
 
         # if(in(agent.id,[10,200,350,400,500,600]))
-        #      println("the fear is $(agent.fear)")
-        #      println("health stauts is $(agent.health_status)")
-        #      println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior ols behavior $old_behavior")
+        #     println("the fear is $(agent.fear) a daily cases of $daily_cases")
+        #     println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior ols behavior $old_behavior")
         # end
     end
 
@@ -381,7 +374,8 @@ end
         prop = model.properties
 
         #mean rate Chu 2020 f
-        risk = if agent.behavior > 70
+        risk = if agent.behavior > 100
+            print
             0.0366
         else
             0.095
@@ -393,6 +387,7 @@ end
 
         #test for infeciton curve
         risk = risk*0.7
+
         #infect the number of contacts and then return
         #get node of agent, skip if only him
         node_contents = get_node_contents(agent.pos, model)
@@ -457,7 +452,7 @@ end
             end
         elseif agent.health_status == :NQ && agent.days_infected == model.properties[:exposed_period]+1
             #decide if going into quarantine, influenced by behavior - since its mandatory by government, only small percentage doesnt go into quarantine
-            #this decision is only taken once when becoming symptomatic. The whole household also becomes quarantined
+            #this decision is only taken once when becoming symptomatic
             if rand()*agent.behavior/100>0.05
                 agent.health_status = :Q
             end
@@ -474,7 +469,7 @@ end
             #see if agent with heavy symptoms dies or recovers. Happens after three weeks as ? specifies
             #no age here, since we already used this for severe cases. Source RKI Steckbrief
                 if rand()<0.22
-                    agent.health_status = :D
+                    kill_agent!(agent, model)
                 else
                     agent.health_status = :M
                 end
@@ -484,7 +479,7 @@ end
     end
 
     #data collection functions
-    infected(x) = count(in(i,(:E,:IwS,:NQ,:Q,:HS)) for i in x)
+    infected(x) = count(in(i,(:E,:IwS,:Q,:NQ,:HS)) for i in x)
     recovered(x) = count(in(i,(:M,:D)) for i in x)
     susceptible(x) = count(i == :S for i in x)
     mean_sentiment(x) = Int64(round(mean(x)))
@@ -519,7 +514,7 @@ end
     #combine dfs,rename them appropriately and return them
     data_m = select(data_m,Not(:step))
     data = hcat(data_a,data_m)
-    delete!(data,1)
+    deleterows!(data,1)
     #add the daily cases since this is an accurate count of the new infections today
     data = hcat(data,DataFrame(infected_adjusted=last(infected_timeline)))
     DataFrames.rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:behavior,:fear_over,:daily_cases,:days_passed,:infected_adjusted])
