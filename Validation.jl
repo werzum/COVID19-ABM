@@ -148,3 +148,50 @@ function run_multiple_behavior(model,social_groups,distant_groups,steps,replicat
     println("error is $error")
     return error
 end
+
+function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
+    reset_model_parallel(1)
+    all_data = pmap(j -> agent_week!(deepcopy(model),social_groups,distant_groups,steps,false), 1:replicates)
+    infected = Array{Int32}(undef,steps*7)
+    for elm in all_data
+        infected = hcat(infected,elm.mean_behavior)
+    end
+
+    infected = infected[:,setdiff(1:end,1)]
+    infected = mean(infected,dims=2)
+
+
+    fear = Array{Int32}(undef,steps*7)
+    for elm in all_data
+        fear = hcat(fear,elm.mean_fear)
+    end
+    fear = fear[:,setdiff(1:end,1)]
+    fear = mean(fear,dims=2)
+    #get the case data from germany
+    csv_raw = CSV.read("SourceData\\fear_yougov.csv";delim=";")
+    DataFrames.rename!(csv_raw,[:x,:y])
+    csv_raw.x = [round(parse(Float16,replace(x,","=>"."))) for x in csv_raw.x]
+    csv_raw.y = [round(parse(Float16,replace(x,","=>"."))) for x in csv_raw.y]
+    sort(csv_raw,:x)
+    #prepend some data as guess for the trend
+    fear_yougov_prepend = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,3,6,9,14,18,21,25,28,31]
+    #try to delete row 3, doesnt work so far.
+    csv_raw = csv_raw[setdiff(1:end, 3), :]
+    #parse the strings to Float16s
+    #starting at the 16.03.
+    #adding the missing month, since the graph only starts from the 16.03. and not as the model the 14.02.
+    fear_yougov = vcat(fear_yougov_prepend,csv_raw.y)
+    #scale it to 100
+    fear_yougov = fear_yougov.*2
+    csv_raw = CSV.read("SourceData\\Mobility_Data.csv")
+    Plots.plot(csv_raw.Value,label="behavior_real")
+    plot!(fear,label="fear_model")
+    plot!(fear_yougov,label="fear_real")
+    display(plot!(infected,label="behavior_model"))
+
+    error = mape(csv_raw.Value,infected)
+    println("error behavior is $error")
+    error = mape(fear_yougov,fear)
+    println("error fear is $error")
+    return error
+end
