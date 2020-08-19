@@ -29,7 +29,7 @@
             #println("mean fear is $(mean([agent.fear for agent in all_agents]))")
 
             #run the model
-            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth,norms,attitude)
             #update the count of infected now and reported
             #since actual cases are about 1,8x higher than reported cases, divide this (https://www.mpg.de/14906897/0604-defo-137749-wie-viele-menschen-haben-tatsaechlich-covid-19)
             infected_count = last(infected_timeline)+model.properties[:daily_cases]#round(sum([in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) for agent in  all_agents]))
@@ -177,7 +177,7 @@ end
 #validation RMSE sometimes returns inf. why u do dis?
 #verlängern/verlangsamung des Abfalls der Message-Kurven
 
-@everywhere function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
+@everywhere function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth,norms, attitude)
 
     #put functions within parent scope so we can read from this scope
     function move_infect!(agent)
@@ -301,46 +301,50 @@ end
         model.properties[:norms_message] == true && rand()>0.1 && (mean_behavior*=1.05)
 
         #get the agents attitude with our decay
-        attitude = attitude_decay(agent.original_attitude, agent.attitude)
+        attitude_now = attitude_decay(agent.original_attitude, agent.attitude)
 
-        #get personal environment infected and compute a threat value
-        #get #infected within agents environment
-        acquaintances_infected = length(filter(x -> in(x.health_status, (:NQ,:Q,:HS)) && (x.household == agent.household || x.workplace == agent.workplace || x.socialgroup == agent.socialgroup || x.distantgroup == agent.distantgroup),all_agents))
+        # #get personal environment infected and compute a threat value
+        # #get #infected within agents environment
+        # acquaintances_infected = length(filter(x -> in(x.health_status, (:NQ,:Q,:HS)) && (x.household == agent.household || x.workplace == agent.workplace || x.socialgroup == agent.socialgroup || x.distantgroup == agent.distantgroup),all_agents))
+        #
+        # if acquaintances_infected == 0 || model.infected_reported == 0
+        #     acquaintances_infected = 1
+        # end
+        # #add them as a modifier to the fear rate
+        # if agent.acquaintances_growth != 0
+        #     #get the growth rate of infected
+        #     growth = acquaintances_infected/agent.acquaintances_growth
+        #     agent.acquaintances_growth = acquaintances_infected
+        # else
+        #     growth = 1
+        # end
+        #
+        # #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
+        # #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
+        # #infected_growth = last(infected_timeline_growth)/50
+        # if length(infected_timeline)>1
+        #     daily_cases = infected_timeline[end] - infected_timeline[end-1]
+        # else
+        #     daily_cases = infected_timeline[end]
+        # end
+        # daily_cases/=200
+        # acquaintances_infected_now = acquaintances_infected/15
+        # agent.fear = fear_growth(daily_cases,acquaintances_infected_now)
+        # time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
+        # #and apply the exponential decay to it after two weeks and we didnt have growth for three days
+        #
+        # if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 106,trues(3))
+        #     agent.fear = fear_decay(agent.fear, time)
+        # end
 
-        if acquaintances_infected == 0 || model.infected_reported == 0
-            acquaintances_infected = 1
-        end
-        #add them as a modifier to the fear rate
-        if agent.acquaintances_growth != 0
-            #get the growth rate of infected
-            growth = acquaintances_infected/agent.acquaintances_growth
-            agent.acquaintances_growth = acquaintances_infected
-        else
-            growth = 1
-        end
+        agent.fear = (norms[model.properties[:days_passed]]*14)
 
-        #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
-        #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
-        #infected_growth = last(infected_timeline_growth)/50
-        if length(infected_timeline)>1
-            daily_cases = infected_timeline[end] - infected_timeline[end-1]
-        else
-            daily_cases = infected_timeline[end]
-        end
-        daily_cases/=200
-        acquaintances_infected_now = acquaintances_infected/15
-        agent.fear = fear_growth(daily_cases,acquaintances_infected_now)
-        time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
-        #and apply the exponential decay to it after two weeks and we didnt have growth for three days
 
-        if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 106,trues(3))
-            agent.fear = fear_decay(agent.fear, time)
-        end
 
         #agent behavior is computed as (norm + attitude)/2 + decay(threat)
         old_behavior = agent.behavior
         #reduced influence of fear so that messages can take over when due
-        new_behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/110)))
+        new_behavior = Int16(round(mean([mean_behavior,attitude_now])*(agent.fear/110)+(attitude[model.properties[:days_passed]]*1500)))
 
         #catch the Initialization of behavior
         old_behavior == 0 && (old_behavior = new_behavior)
