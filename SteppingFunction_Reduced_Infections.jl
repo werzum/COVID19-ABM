@@ -50,7 +50,7 @@
             #delay the reported infections by two days as Verzug COronadaten shows https://www.ndr.de/nachrichten/info/Coronavirus-Neue-Daten-stellen-Epidemie-Verlauf-infrage,corona2536.html
             #nowcast shows 3 days delay and 10% less infected as report delay
             length(infected_timeline)<4 ? model.infected_reported=last(infected_timeline)*0.9 : model.infected_reported = infected_timeline[length(infected_timeline)-3]
-            # println("infected timeline is $infected_timeline")
+            println("infected timeline is $infected_timeline")
             # println("infected growth is $infected_timeline_growth")
             # println("at time $(model.days_passed)")
             #and add the data to the dataframe
@@ -164,6 +164,7 @@ end
 #mossong 2008, contacts by age,
 @everywhere function contacts_reworked(input)
     y = 11.17771 + 0.5156303*input - 0.01447889*input^2 + 0.00009245592*input^3
+    model.properties[:work_closes]< model.properties[:days_passed] < model.properties[:work_opens] && (y/= 5)
     return y
 end
 
@@ -186,10 +187,8 @@ end
             #agent goes home and does not move
             if agent.pos != agent.household
                 move_agent!(agent,agent.household,model)
-                return false
-            else
-                return false
             end
+            return false
         elseif in(agent.health_status, (:E,:IwS,:NQ))
             #if agent is infected and moves, add edges on his way to the array of infected edges
             if time_of_day == :work || time_of_day == :work_back
@@ -210,7 +209,7 @@ end
 
             #if our route coincides with the daily route of others
             if (possible_edges>0)
-                agent.behavior > 70 ? risk = 0.366 : risk = 9.5
+                agent.behavior > 10 ? risk = 0.001 : risk = 4#3.66 : risk = 9.5
                 #use agent wealth as additional factor
                 wealth_modificator = agent.wealth/219
                 wealth_modificator < 0.01 && (wealth_modificator = 0.01)
@@ -218,6 +217,7 @@ end
                 #risk increases when agentf
                 risk=risk*(2-wealth_modificator)
                 #test for adjusting infection frequencys
+                #risk = risk*0.7
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts and /10 for scale
                 if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
                     agent.health_status = :E
@@ -231,7 +231,7 @@ end
     function move_step!(agent, model)
         #check which time of day it is, then calculate move infection if not in quarantine, and finally move the agent
         if time_of_day == :work && agent.workplace != 0
-            #20% stay at home during covid contact prohibition
+            #50% stay at home during covid contact prohibition
             if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && rand()<0.498
                 return
             end
@@ -251,13 +251,13 @@ end
             end
         elseif time_of_day == :social && in(agent.socialgroup, social_active_group)
             #skip social interaction, ie. social distancing, when behavior is active and everything is closed
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 70 && rand()<0.9
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 10 && rand()<0.99
                 return
             end
             move = move_infect!(agent)
             move == true && move_agent!(agent,agent.socialgroup,model)
         elseif time_of_day == :social && in(agent.distantgroup, distant_active_group)
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 70 && rand()<0.9
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 10 && rand()<0.99
                 return
             end
 
@@ -301,7 +301,6 @@ end
 
         #get the agents attitude with our decay
         attitude = attitude_decay(agent.original_attitude, agent.attitude)
-        old_fear = agent.fear
 
         #get personal environment infected and compute a threat value
         #get #infected within agents environment
@@ -327,25 +326,14 @@ end
         else
             daily_cases = infected_timeline[end]
         end
-        daily_cases/=200
-        acquaintances_infected_now = acquaintances_infected/15
-        new_fear = fear_growth(daily_cases,acquaintances_infected_now)
+        acquaintances_infected_now = acquaintances_infected/3
+        agent.fear = fear_growth(daily_cases,daily_cases)#acquaintances_infected_now)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
         #and apply the exponential decay to it after two weeks and we didnt have growth for three days
 
-        if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 105,trues(3))
-            new_fear = Int16(round(fear_decay(new_fear, time)))
+        if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 106,trues(3))
+            agent.fear = fear_decay(agent.fear, time)
         end
-
-
-        old_fear == 0 && (old_fear = new_fear)
-        if new_fear>old_fear*1.4
-            #round up to prevent behavior getting stuck at 1 for initially small increments
-            new_fear = old_fear*1.4
-        elseif new_fear < old_fear*0.9
-            new_fear = old_fear*0.9
-        end
-        agent.fear = new_fear
 
         #agent behavior is computed as (norm + attitude)/2 + decay(threat)
         old_behavior = agent.behavior
@@ -365,9 +353,9 @@ end
             new_behavior = Int16(ceil(old_behavior*0.9))
         end
         agent.behavior = new_behavior
-        #
+
         # if(in(agent.id,[10,200,350,400,500,600]))
-        #     println("the new fear is $(new_fear), old fear is $(old_fear) a daily cases of $daily_cases")
+        #     println("the fear is $(agent.fear) a daily cases of $daily_cases")
         #     println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior ols behavior $old_behavior")
         # end
     end
@@ -384,22 +372,22 @@ end
         prop = model.properties
 
         #mean rate Chu 2020 f
-        risk = if agent.behavior > 70
-            0.00366
+        risk = if agent.behavior > 10
+            0.0001#0.0366
         else
-            0.095
+            0.4#0.095
         end
         #rate of secondary infections in household very high, Wei Li 2020, but at least contained to household
         if agent.health_status == :Q
-            if agent.behavior > 70
-                risk = 0.00163
+            if agent.behavior > 10
+                risk = 0.0001#0.163
             else
-                risk = 0.0163
+                risk = 0.4
             end
         end
 
-        #test for infection curve
-        risk = risk*0.7
+        #test for infeciton curve
+        #risk = risk*0.7
 
         #infect the number of contacts and then return
         #get node of agent, skip if only him
@@ -413,6 +401,7 @@ end
             contacts = 14
         end
 
+
         #reduce it to the proporties of contact as mossong 2008.  Joined school and work, home and is about 35(work)+23(back)+16(social)+23(back) = 90 perc
         if time_of_day == :work
             contacts*=0.35
@@ -421,7 +410,7 @@ end
         else
             contacts*=0.26
         end
-        contacts = round(contacts)
+        contacts = round(contacts/4)
         #check if age_contacts bigger than available agents, set it then to the #available agents
         if contacts > length(node_contents) - 1
             contacts = length(node_contents) - 1
@@ -492,7 +481,7 @@ end
     end
 
     #data collection functions
-    infected(x) = count(in(i,(:E,:IwS,:Q,:NQ,:HS)) for i in x)
+    infected(x) = count(in(i,(:IwS,:Q,:NQ,:HS)) for i in x)
     recovered(x) = count(in(i,(:M,:D)) for i in x)
     susceptible(x) = count(i == :S for i in x)
     mean_sentiment(x) = Int64(round(mean(x)))

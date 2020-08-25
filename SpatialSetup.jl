@@ -141,8 +141,11 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #from sinus institut, get friend size groups
     friend_distribution = Normal(11,3)
     sample = Int.(round.(rand(friend_distribution,nodecount)))
+    n = 1
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(friend_distribution,nodecount)))
+        n+=1
+        n == 1 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the social groups up
@@ -161,8 +164,11 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #from sinus institut, get friend size groups
     distant_distribution = Normal(20,5)
     sample = Int.(round.(rand(distant_distribution,nodecount)))
+    n = 1
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(distant_distribution,nodecount)))
+        n+=1
+        n == 1 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the distant groups
