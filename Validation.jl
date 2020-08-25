@@ -38,10 +38,10 @@ function validate_fear(steps)
 end
 
 function mape(series1, series2)
-    errors = [abs((series1[i]-series2[i])/series1[i]) for i in 1:length(series2)]
+    errors = [abs((series1[i]-series2[i])/series1[i])*100 for i in 1:length(series2)]
     #replace NaNs,Infs for division by zero
     replace!(x -> (isnan(x) || isinf(x)) ? 0 : x,errors)
-    m = 1/length(series2)*sum(errors)*100
+    m = (1/length(series2))*sum(errors)
 end
 
 function run_multiple(model,social_groups,distant_groups,steps,replicates)
@@ -152,13 +152,13 @@ end
 function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     reset_model_parallel(1)
     all_data = pmap(j -> agent_week!(deepcopy(model),social_groups,distant_groups,steps,false), 1:replicates)
-    infected = Array{Int32}(undef,steps*7)
+    behavior = Array{Int32}(undef,steps*7)
     for elm in all_data
-        infected = hcat(infected,elm.mean_behavior)
+        behavior = hcat(behavior,elm.mean_behavior)
     end
 
-    infected = infected[:,setdiff(1:end,1)]
-    infected = mean(infected,dims=2)
+    behavior = behavior[:,setdiff(1:end,1)]
+    behavior = mean(behavior,dims=2)
 
 
     fear = Array{Int32}(undef,steps*7)
@@ -184,14 +184,34 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     #scale it to 100
     fear_yougov = fear_yougov.*2
     csv_raw = CSV.read("SourceData\\Mobility_Data.csv")
-    Plots.plot(csv_raw.Value,label="behavior_real")
-    plot!(fear,label="fear_model")
-    plot!(fear_yougov,label="fear_real")
-    display(plot!(infected,label="behavior_model"))
 
-    error = mape(csv_raw.Value,infected)
+
+
+    csv_infections = CSV.read("SourceData\\covid19_ECDC.csv")
+    csv_infections = filter(x -> x[Symbol("Country/Region")] == "Germany",csv_infections)
+    #get cases from the 14.02., the start date of the model and five more months
+    csv_infections = csv_infections.infections[46:200]
+    csv_infections = csv_infections ./ 20
+    infected = Array{Int32}(undef,steps*7)
+    for elm in all_data
+        infected = hcat(fear,elm.infected_adjusted)
+    end
+    infected = infected[:,setdiff(1:end,1)]
+    infected = mean(infected,dims=2)
+
+
+    Plots.plot(csv_raw.Value.*100,label="behavior_real")
+    plot!(csv_infections,label="infected_real")
+    plot!(infected,label="infected_model")
+    plot!(fear.*100,label="fear_model")
+    plot!(fear_yougov.*100,label="fear_real")
+    display(plot!(behavior.*100,label="behavior_model"))
+
+    error = mape(csv_raw.Value,behavior)
     println("error behavior is $error")
     error = mape(fear_yougov,fear)
     println("error fear is $error")
+    error = mape(csv_infections,infected)
+    println("error infected is $error")
     return error
 end
