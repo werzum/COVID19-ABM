@@ -202,13 +202,14 @@ end
 
             #if our route coincides with the daily route of others
             if (possible_edges>0)
-                agent.behavior > 70 ? risk = 0.366 : risk = 9.5
+                agent.behavior > 60 ? risk = 0.366 : risk = 9.5
                 #use agent wealth as additional factor
                 wealth_modificator = agent.wealth/219
                 wealth_modificator < 0.01 && (wealth_modificator = 0.01)
                 wealth_modificator > 1.9 && (wealth_modificator = 1.9)
                 #risk increases when agentf
                 risk=risk*(2-wealth_modificator)
+                risk = risk*0.65
                 #test for adjusting infection frequencys
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts and /10 for scale
                 if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
@@ -243,13 +244,13 @@ end
             end
         elseif time_of_day == :social && in(agent.socialgroup, social_active_group)
             #skip social interaction, ie. social distancing, when behavior is active and everything is closed
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 70 && rand()<0.9
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 60 && rand()<0.9
                 return
             end
             move = move_infect!(agent)
             move == true && move_agent!(agent,agent.socialgroup,model)
         elseif time_of_day == :social && in(agent.distantgroup, distant_active_group)
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 70 && rand()<0.9
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 60 && rand()<0.9
                 return
             end
 
@@ -314,8 +315,8 @@ end
         #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
         #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
         #infected_growth = last(infected_timeline_growth)/50
-        if length(infected_timeline)>1
-            daily_cases = infected_timeline[end] - infected_timeline[end-1]
+        if length(infected_timeline)>3
+            daily_cases = infected_timeline[end-2] - infected_timeline[end-3]
         else
             daily_cases = infected_timeline[end]
         end
@@ -376,14 +377,14 @@ end
         prop = model.properties
 
         #mean rate Chu 2020 f
-        risk = if agent.behavior > 70
+        risk = if agent.behavior > 60
             0.00366
         else
             0.095
         end
         #rate of secondary infections in household very high, Wei Li 2020, but at least contained to household
         if agent.health_status == :Q
-            if agent.behavior > 70
+            if agent.behavior > 60
                 risk = 0.00163
             else
                 risk = 0.0163
@@ -391,13 +392,12 @@ end
         end
 
         #test for infection curve
-        risk = risk*0.7
+        risk = risk*0.65
 
         #infect the number of contacts and then return
         #get node of agent, skip if only him
         node_contents = get_node_contents(agent.pos, model)
         length(node_contents)==1 && return
-        #
         contacts = contacts_reworked(Int32(agent.age))
 
         #if agent is older than 80, function gets negative. Fix this and also giving agents a contact ceiling of 30, set it to mean #contacts if outside bounds

@@ -189,7 +189,8 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     csv_infections = filter(x -> x[Symbol("Country/Region")] == "Germany",csv_infections)
     #get cases from the 14.02., the start date of the model and five more months
     csv_infections = csv_infections.infections[46:200]
-    csv_infections = csv_infections ./ 20
+    #both start with 1 infection
+    csv_infections = csv_infections ./ 15
     infected = Array{Int32}(undef,steps*7)
     for elm in all_data
         infected = hcat(fear,elm.infected_adjusted)
@@ -203,6 +204,7 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     plot!(fear.*100,label="fear_model")
     plot!(fear_yougov.*100,label="fear_real")
     display(plot!(behavior.*100,label="behavior_model"))
+
 
     error = mape(csv_raw.Value,behavior)
     println("error behavior is $error")
