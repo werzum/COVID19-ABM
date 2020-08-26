@@ -149,7 +149,6 @@ end
 
 @everywhere function fear_decay(fear,time)
     #modify fear so that it decays over time
-    #return fear*ℯ^(-(time/250))
     return (fear-0.5)
 end
 
@@ -168,14 +167,7 @@ end
 end
 
 #TODO
-#add vor verification streek how infection prob grows with household size
-#,aybe higher threat perception for women as Perotta
-#VERIFY MODEL!!! VIsualize spread, show percentage men/women, where do most infections happen, etc -> need a valid model before
-#Infection travel wealth percentage public transport
-#explain in methodolgy that workspace size is a function of wealth
-#MAYBE do fear growth similiar to attitude growth
-#validation RMSE sometimes returns inf. why u do dis?
-#verlängern/verlangsamung des Abfalls der Message-Kurven
+
 
 @everywhere function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
 
