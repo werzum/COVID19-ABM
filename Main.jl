@@ -1,5 +1,6 @@
 using Distributed
 using Agents, Random, DataFrames, LightGraphs, CSV, Plots
+using Gadfly, Interact, Compose, Printf, Reactive
 
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step

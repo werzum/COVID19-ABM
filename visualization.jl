@@ -1,7 +1,3 @@
-using Printf
-using Reactive, Interact, Compose
-using Gadfly
-
 function draw_initial_map(model,lat,long)
     N = Agents.nodes(model)
     ncolor = Vector(undef, length(N))
