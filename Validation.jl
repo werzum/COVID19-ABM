@@ -185,8 +185,6 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     fear_yougov = fear_yougov.*2
     csv_raw = CSV.read("SourceData\\Mobility_Data.csv")
 
-
-
     csv_infections = CSV.read("SourceData\\covid19_ECDC.csv")
     csv_infections = filter(x -> x[Symbol("Country/Region")] == "Germany",csv_infections)
     #get cases from the 14.02., the start date of the model and five more months
@@ -198,7 +196,6 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     end
     infected = infected[:,setdiff(1:end,1)]
     infected = mean(infected,dims=2)
-
 
     Plots.plot(csv_raw.Value.*100,label="behavior_real")
     plot!(csv_infections,label="infected_real")
