@@ -207,11 +207,11 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     plot!(fear_yougov.*100,label="fear_real")
     display(plot!(behavior.*100,label="behavior_model"))
 
-    error = mape(csv_raw.Value,behavior)
+    error_behavior = mape(csv_raw.Value,behavior)
     println("error behavior is $error")
-    error = mape(fear_yougov,fear)
+    error_fear = mape(fear_yougov,fear)
     println("error fear is $error")
-    error = mape(csv_infections,infected)
+    error_infected = mape(csv_infections,infected)
     println("error infected is $error")
-    return error
+    return (error_fear,error_infected,error_behavior,behavior,fear,infected)
 end

@@ -1,4 +1,4 @@
-using Distributed
+using Distributed, ClusterManagers
 using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 
 Distributed, StatsBase, Distributions, Statistics, GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor, LightGraphs, OpenStreetMapX
@@ -54,7 +54,7 @@ parameters = Dict(
 #initialize the model and generate the map - takes about 115s for 13.000 agents
 model,lat,long, social_groups, distant_groups = setup(parameters)
 #add workers and make the packages available for all of them
-addprocs(7)
+addprocs(SlurmManager(8), t="00:5:00")
 
 @everywhere using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 @everywhere using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor, LightGraphs, OpenStreetMapX
@@ -86,7 +86,5 @@ end
 @eval @everywhere social_groups = $social_groups
 @eval @everywhere distant_groups = $distant_groups
 
-#step the model X times - each step takes about Xs
-
-#Plot map
-#draw_map(model,lat,long)
+#create a run with 8 simulations
+print(run_multiple_both(model,social_groups,distant_groups,16,8))

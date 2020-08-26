@@ -217,6 +217,7 @@ end
                 wealth_modificator > 1.9 && (wealth_modificator = 1.9)
                 #risk increases when agentf
                 risk=risk*(2-wealth_modificator)
+                risk = risk*0.7
                 #test for adjusting infection frequencys
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts and /10 for scale
                 if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
@@ -322,8 +323,8 @@ end
         #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
         #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
         #infected_growth = last(infected_timeline_growth)/50
-        if length(infected_timeline)>1
-            daily_cases = infected_timeline[end] - infected_timeline[end-1]
+        if length(infected_timeline)>3
+            daily_cases = infected_timeline[end-2] - infected_timeline[end-3]
         else
             daily_cases = infected_timeline[end]
         end

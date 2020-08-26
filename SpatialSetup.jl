@@ -3,12 +3,12 @@ using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes,
 function create_node_map()
     #OSM is obtained best from https://protomaps.com/extracts/b6fd95e9-cb6b-40b7-b58b-acbead2e2643 for easy node selection
     #get map data and its inbounds
-    aachen_map = get_map_data("SourceData\\aachen_test3.osm", use_cache=false, only_intersections=true)
+    aachen_map = get_map_data("SourceData\\aachen_even_bigger.osm", use_cache=false, only_intersections=true)
     aachen_graph = aachen_map.g
     bounds = aachen_map.bounds
 
     #use the raw parseOSM function to obtain nodes tagged with "school"
-    aachen_schools = OpenStreetMapX.parseOSM("SourceData\\aachen_test3.osm")
+    aachen_schools = OpenStreetMapX.parseOSM("SourceData\\aachen_even_bigger.osm")
     aachen_schools_nodes = filter((k,v) -> v[2] == "school", aachen_schools.features)
     aachen_schools = filter(key -> haskey(aachen_schools_nodes,key.first),aachen_schools.nodes)
 

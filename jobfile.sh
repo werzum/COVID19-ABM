@@ -8,4 +8,4 @@
 
 source $HOME/julia-v1.5.0/julia-environment
 cd abm_folder
-julia clustermanager_script.jl
+julia main.jl
