@@ -66,11 +66,11 @@
 end
 
 @everywhere function read_message_data()
-    rawdata_attitude = DataFrame!(CSV.File("SourceData\\attitude.csv",silencewarnings=true))
+    rawdata_attitude = DataFrame!(CSV.File(joinpath("SourceData","attitude.csv"),silencewarnings=true))
     #remove the first month so we start at the 14.02.2020 (16 cases in all of germany), no news found until then
     rawdata_attitude = rawdata_attitude[31:end,:]
     attitude = rawdata_attitude.Value
-    rawdata_norms = DataFrame!(CSV.File("SourceData\\norms.csv",silencewarnings=true))
+    rawdata_norms = DataFrame!(CSV.File(joinpath("SourceData","norms.csv"),silencewarnings=true))
     rawdata_norms = rawdata_norms[41:end,:]
     norms = rawdata_norms.Value
     norms_data = rawdata_norms.Date

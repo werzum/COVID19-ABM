@@ -1,0 +1,20 @@
+ERROR: LoadError: SystemError: opening file "SourceData\\aachen_even_bigger.osm": No such file or directory
+Stacktrace:
+ [1] systemerror(::String, ::Int32; extrainfo::Nothing) at ./error.jl:168
+ [2] #systemerror#48 at ./error.jl:167 [inlined]
+ [3] systemerror at ./error.jl:167 [inlined]
+ [4] open(::String; lock::Bool, read::Bool, write::Nothing, create::Nothing, truncate::Nothing, append::Nothing) at ./iostream.jl:284
+ [5] open(::String, ::String; lock::Bool) at ./iostream.jl:346
+ [6] open at ./iostream.jl:346 [inlined]
+ [7] parsefile(::String, ::LibExpat.XPCallbacks; bufferlines::Int64, data::OpenStreetMapX.DataHandle) at /home/cr480648/.julia/packages/LibExpat/fiTzg/src/streaming.jl:200
+ [8] #parseOSM#5 at /home/cr480648/.julia/packages/OpenStreetMapX/gVsna/src/parseMap.jl:64 [inlined]
+ [9] parseOSM at /home/cr480648/.julia/packages/OpenStreetMapX/gVsna/src/parseMap.jl:60 [inlined]
+ [10] get_map_data(::String, ::Nothing; road_levels::Set{Int64}, use_cache::Bool, only_intersections::Bool, trim_to_connected_graph::Bool) at /home/cr480648/.julia/packages/OpenStreetMapX/gVsna/src/parseMap.jl:100
+ [11] create_node_map() at /rwthfs/rz/cluster/home/cr480648/Julia/SpatialSetup.jl:6
+ [12] setup(::Dict{Symbol,Real}) at /rwthfs/rz/cluster/home/cr480648/Julia/SpatialSetup.jl:392
+ [13] top-level scope at /rwthfs/rz/cluster/home/cr480648/Julia/Main.jl:51
+ [14] include(::Function, ::Module, ::String) at ./Base.jl:380
+ [15] include(::Module, ::String) at ./Base.jl:368
+ [16] exec_options(::Base.JLOptions) at ./client.jl:296
+ [17] _start() at ./client.jl:506
+in expression starting at /rwthfs/rz/cluster/home/cr480648/Julia/Main.jl:51

@@ -3,7 +3,7 @@ using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
-include("Visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long)
+include("visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long)
 #include("model_initiation.jl") #exports model_initiation
 include("UtilityFunctions.jl")# exports add_infected(number),reset_infected(model)
 include("Validation.jl")#exports nothing so far
