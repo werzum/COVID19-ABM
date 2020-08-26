@@ -1,10 +1,6 @@
 using Distributed, ClusterManagers
 using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 
-Distributed, StatsBase, Distributions, Statistics, GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor, LightGraphs, OpenStreetMapX
-#TODO map is unweighted so far, could add wheights but then have to
-#TODO could clear the warnings about changed uses of filter, csv read and filter
-
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
 include("Visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long)

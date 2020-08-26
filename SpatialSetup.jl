@@ -145,7 +145,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(friend_distribution,nodecount)))
         n+=1
-        n == 1 && (sample = [inhabitants])
+        n == 100 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the social groups up
@@ -168,7 +168,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(distant_distribution,nodecount)))
         n+=1
-        n == 1 && (sample = [inhabitants])
+        n == 100 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the distant groups
@@ -389,10 +389,8 @@ end
 function setup(params)
 
     #create the nodemap and rawdata demography map and set the bounds for it
-    r1 = @spawn create_node_map()
-    r2 = @spawn create_demography_map()
-    nodes,long,lat,bounds,schools,map_data = fetch(r1)
-    rawdata = fetch(r2)
+    nodes,long,lat,bounds,schools,map_data = create_node_map()
+    rawdata = create_demography_map()
     println("loaded raw data")
     #get the grid data within the boundaries of the node map
     working_grid = rawdata[(rawdata.X .> bounds.min_x) .& (rawdata.X .< bounds.max_x) .& (rawdata.Y .> bounds.min_y).& (rawdata.Y .< bounds.max_y),:]
