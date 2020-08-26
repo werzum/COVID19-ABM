@@ -144,8 +144,8 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     n = 1
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(friend_distribution,nodecount)))
-        n+=1
-        n == 100 && (sample = [inhabitants])
+        # n+=1
+        # n == 100 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the social groups up
@@ -167,8 +167,8 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     n = 1
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(distant_distribution,nodecount)))
-        n+=1
-        n == 100 && (sample = [inhabitants])
+        # n+=1
+        # n == 100 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the distant groups
@@ -397,7 +397,7 @@ function setup(params)
 
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
-    correction_factor = nv(nodes)
+    correction_factor = 1#nv(nodes)
 
     #set up the variables, structs etc.
     space = GraphSpace(nodes)
