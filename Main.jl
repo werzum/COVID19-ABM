@@ -87,4 +87,4 @@ end
 @eval @everywhere distant_groups = $distant_groups
 
 #create a run with 8 simulations
-print(run_multiple_both(model,social_groups,distant_groups,16,8))
+print(run_multiple_both(model,social_groups,distant_groups,1,8))
