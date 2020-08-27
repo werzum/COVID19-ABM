@@ -9,8 +9,8 @@ function create_node_map()
 
     #use the raw parseOSM function to obtain nodes tagged with "school"
     aachen_schools = OpenStreetMapX.parseOSM(joinpath("SourceData","aachen_even_bigger.osm"))
-    aachen_schools_nodes = filter((k,v) -> v[2] == "school", aachen_schools.features)
-    aachen_schools = filter(key -> haskey(aachen_schools_nodes,key.first),aachen_schools.nodes)
+    aachen_schools_nodes = [key for (key,value) in aachen_schools.features if value[2]=="school"]
+    aachen_schools = filter((key,value) -> in(key,aachen_schools_nodes),aachen_schools.nodes)
 
     #lat long of Aachen as reference frame
     LLA_ref = LLA((bounds.max_y+bounds.min_y)/2, (bounds.max_x+bounds.min_x)/2, 266.0)
@@ -44,7 +44,7 @@ function create_node_map()
 end
 
 function create_demography_map()
-    rawdata = DataFrame!(CSV.File(joinpath("SourceData","zensus.csv")))
+    rawdata = DataFrame!(CSV.File("SourceData\\zensus.csv"))
     #make sure properties are symboml
     colsymbols = propertynames(rawdata)
     DataFrames.rename!(rawdata,colsymbols)
