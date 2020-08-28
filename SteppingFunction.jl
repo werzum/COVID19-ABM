@@ -126,7 +126,7 @@ end
 
 @everywhere function property_growth(property)
     #scale the attitude to fit e
-    property_factor = scale(0,158,0,4,property)
+    property_factor = scale(0,170,0,3,property)
     #return it with an increase of max. 1.58
     return property*(1+ℯ^(-property_factor))
 end
@@ -138,13 +138,13 @@ end
     original_attitude = scale(0,158,0,2,original_attitude)
     attitude = scale(0,158,0,2,attitude)
     difference = attitude-original_attitude
-    #decrease the attitude the bigger the difference
+    #decrease the attitude the bigger  the difference
     return round(unscaled_attitude*(ℯ^(-difference/2)))
 end
 
 @everywhere function norm_decay(norm,time)
     #modify norms so that it decays over time
-    return norm*ℯ^(-(time/300))
+    return norm*ℯ^(-(time/270))
 end
 
 @everywhere function fear_decay(fear,time)
@@ -165,9 +165,6 @@ end
     y = 11.17771 + 0.5156303*input - 0.01447889*input^2 + 0.00009245592*input^3
     return y
 end
-
-#TODO
-
 
 @everywhere function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
 
@@ -320,7 +317,7 @@ end
         else
             daily_cases = infected_timeline[end]
         end
-        daily_cases/=200
+        daily_cases/=210
         acquaintances_infected_now = acquaintances_infected/15
         new_fear = fear_growth(daily_cases,acquaintances_infected_now)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
