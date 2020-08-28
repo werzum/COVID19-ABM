@@ -1,3 +1,13 @@
+function get_package_list()
+    filter((x) -> typeof(eval(x)) <:  Module && !in(x,(:Main,:Base,:Core,:InteractiveUtils,:Pkg)), names(Main,imported=true))
+end
+
+#start julia and save all functions to precompile file
+#save sysimage with all packages
+#run thing on hpc? Or here? How to fix the stupid CSV read thing?
+#for message calibration: scale furhter (i.e. lower so that curve rises enough)
+
+
 function add_infected(x)
     for i in 1:x
         agent = random_agent(model)

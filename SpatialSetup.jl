@@ -44,7 +44,7 @@ function create_node_map()
 end
 
 function create_demography_map()
-    rawdata = DataFrame!(CSV.File("SourceData\\zensus.csv"))
+    rawdata = DataFrame!(CSV.File(joinpath("SourceData","zensus.csv")))
     #make sure properties are symboml
     colsymbols = propertynames(rawdata)
     DataFrames.rename!(rawdata,colsymbols)
