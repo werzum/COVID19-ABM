@@ -1,7 +1,6 @@
-using PackageCompiler
-addprocs(SlurmManager(1), t="10:5:00")
-using Distributed, ClusterManagers
-using Agents, Random, DataFrames, LightGraphs, CSV, Plots
+using Distributed, PackageCompiler, ClusterManagers
+#addprocs(SlurmManager(1), t="10:5:00")
+using Distributed, Agents, Random, DataFrames, LightGraphs, CSV, Plots
 
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
