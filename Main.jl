@@ -1,5 +1,5 @@
 using PackageCompiler,Distributed, ClusterManagers
-addprocs((1), t="01:5:00")
+addprocs(SlurmManager(1), t="01:5:00")
 @everywhere using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 
 include("SpatialSetup.jl") #exports setup

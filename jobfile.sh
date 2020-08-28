@@ -2,7 +2,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=8
 #SBATCH --ntasks-per-node=8
-#SBATCH --time=10:10:00
+#SBATCH --time=01:10:00
 #SBATCH --output=myoutput.log
 #SBATCH --job-name=julia_abm_testrun_1
 
