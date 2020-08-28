@@ -1,13 +1,1 @@
-ERROR: LoadError: MethodError: no method matching (::var"#1#4")(::Pair{Int64,Tuple{String,String}})
-Closest candidates are:
-  #1(::Any, !Matched::Any) at /rwthfs/rz/cluster/home/cr480648/Julia/SpatialSetup.jl:12
-Stacktrace:
- [1] filter(::var"#1#4", ::Dict{Int64,Tuple{String,String}}) at ./abstractdict.jl:428
- [2] create_node_map() at /rwthfs/rz/cluster/home/cr480648/Julia/SpatialSetup.jl:12
- [3] setup(::Dict{Symbol,Real}) at /rwthfs/rz/cluster/home/cr480648/Julia/SpatialSetup.jl:392
- [4] top-level scope at /rwthfs/rz/cluster/home/cr480648/Julia/Main.jl:51
- [5] include(::Function, ::Module, ::String) at ./Base.jl:380
- [6] include(::Module, ::String) at ./Base.jl:368
- [7] exec_options(::Base.JLOptions) at ./client.jl:296
- [8] _start() at ./client.jl:506
-in expression starting at /rwthfs/rz/cluster/home/cr480648/Julia/Main.jl:51
+slurmstepd: error: *** JOB 16312307 ON ncm0214 CANCELLED AT 2020-08-28T11:50:40 DUE TO TIME LIMIT ***
