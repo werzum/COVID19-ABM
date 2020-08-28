@@ -144,18 +144,27 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     n = 1
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(friend_distribution,nodecount)))
-        # n+=1
-        # n == 100 && (sample = [inhabitants])
+        n+=1
+        n == 100 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the social groups up
-    for (index,value) in enumerate(nodes)
-        hhhere = sample[index]
-        push!(social_groups,value)
+    if length(sample) == 1
+        hhhere = sample[1]
+        push!(social_groups,nodes[1])
         for i in 1:hhhere
-            agent_properties[agent_index+i].socialgroup = value
+            agent_properties[agent_index+i].socialgroup = nodes[1]
         end
         agent_index = agent_index+hhhere
+    else
+        for (index,value) in enumerate(nodes)
+            hhhere = sample[index]
+            push!(social_groups,value)
+            for i in 1:hhhere
+                agent_properties[agent_index+i].socialgroup = value
+            end
+            agent_index = agent_index+hhhere
+        end
     end
 
     #adding distnant groups, representing sport and shopping behavior
@@ -397,7 +406,7 @@ function setup(params)
 
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
-    correction_factor = 1#nv(nodes)
+    correction_factor = nv(nodes)/100
 
     #set up the variables, structs etc.
     space = GraphSpace(nodes)

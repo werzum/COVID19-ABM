@@ -1,7 +1,6 @@
-using PackageCompiler
-addprocs(SlurmManager(1), t="10:5:00")
-using Distributed, ClusterManagers
-using Agents, Random, DataFrames, LightGraphs, CSV, Plots
+using PackageCompiler,Distributed, ClusterManagers
+addprocs((1), t="01:5:00")
+@everywhere using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
@@ -52,7 +51,7 @@ parameters = Dict(
 #initialize the model and generate the map - takes about 115s for 13.000 agents
 model,lat,long, social_groups, distant_groups = setup(parameters)
 #add workers and make the packages available for all of them
-addprocs(SlurmManager(7), t="10:5:00")
+addprocs(SlurmManager(7), t="01:5:00")
 
 @everywhere using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 @everywhere using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes, AgentsPlots, StatsPlots, Luxor, LightGraphs, OpenStreetMapX
