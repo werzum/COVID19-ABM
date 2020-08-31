@@ -144,7 +144,7 @@ end
 
 @everywhere function norm_decay(norm,time)
     #modify norms so that it decays over time
-    return norm*ℯ^(-(time/270))
+    return norm*ℯ^(-(time/340))
 end
 
 @everywhere function fear_decay(fear,time)
@@ -206,7 +206,7 @@ end
                 wealth_modificator > 1.9 && (wealth_modificator = 1.9)
                 #risk increases when agentf
                 risk=risk*(2-wealth_modificator)
-                risk = risk*0.65
+                risk = risk*0.64
                 #test for adjusting infection frequencys
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts and /10 for scale
                 if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
@@ -389,7 +389,7 @@ end
         end
 
         #test for infection curve
-        risk = risk*0.65
+        risk = risk*0.64
 
         #infect the number of contacts and then return
         #get node of agent, skip if only him
