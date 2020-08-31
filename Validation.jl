@@ -208,9 +208,12 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
 
     error = mape(csv_raw.Value,behavior)
     println("error behavior is $error")
+    println("behavior data is $behavior")
     error = mape(fear_yougov,fear)
     println("error fear is $error")
+    println("fear data is $fear")
     error = mape(csv_infections,infected)
     println("error infected is $error")
+    println("infected data is $infected")
     return error
 end
