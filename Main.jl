@@ -3,10 +3,8 @@ using Agents, Random, DataFrames, LightGraphs, CSV, Plots
 using Gadfly, Interact, Compose, Printf, Reactive
 
 include("SpatialSetup.jl") #exports setup
-#include("agent_functions.jl") #exports agent_step
-include("Visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long)
-#include("model_initiation.jl") #exports model_initiation
-include("UtilityFunctions.jl")# exports add_infected(number),reset_infected(model)
+include("Visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long), create_chart(steps), create_gif(steps)
+include("UtilityFunctions.jl")# exports add_infected(number),reset_infected(model),restart_model(agents,steps) and scale(min_m,max_m,min_t,max_t,m)
 include("Validation.jl")#exports nothing so far
 include("SteppingFunction.jl")#exports agent_week!
 
@@ -61,7 +59,7 @@ include("SteppingFunction.jl")#exports agent_week!
 @everywhere mutable struct DemoAgent <: AbstractAgent
     id::Int
     pos::Int
-    health_status::Symbol #reflects the SIR extended states (Susceptible, Exposed, Infected, InfectedWitoutSymptpms, NotQuarantined, Quarantined, Dead, Immune)
+    health_status::Symbol
     days_infected::Int16
     attitude::Int16
     original_attitude::Int16

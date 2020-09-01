@@ -115,4 +115,3 @@ savefig(a,"Graphics\\example_route.png")
 using Compose
 draw(PNG("Graphics\\example_route.png",16cm,16cm),a)
 =#
-set_default_graphic_size(30Plots.cm, 30Plots.cm)
