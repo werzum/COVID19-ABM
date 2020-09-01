@@ -48,6 +48,8 @@ parameters = Dict(
             :death_rate=> 0.047,
             :days_passed => 0)
 
+print("done with loading of basic code")
+#=
 #initialize the model and generate the map - takes about 115s for 13.000 agents
 model,lat,long, social_groups, distant_groups = setup(parameters)
 #add workers and make the packages available for all of them
