@@ -70,7 +70,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
 
     #get the number of inhabitants, women, old people etc for the current grid
     inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
-    inhabitants == 0 && return
+    inhabitants < 2 && return
     println("working at next group with $inhabitants inhabitants")
     women = get_amount(inhabitants,group.Frauen_A)
     age = Int(round(mean(group.Alter_D)))
@@ -91,9 +91,9 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     [agent.women = true for agent in agent_properties[1:women]]
     shuffle!(agent_properties)
     [agent.age = rand(1:17) for agent in agent_properties[1:below18]]
+    #check if there are enough agents before setting the share to old age
     [agent.age = rand(66:110) for agent in agent_properties[below18+1:(below18+1+over65)]]
     shuffle!(agent_properties)
-    #TODO komische Verteilung: falsch gezogene Werte werden an max/min Position gesetzt?
 
     #shuffle the agent_properties, sample #inhabitants, map it to the desired range and assign those to the agent properties
     wealth_distribution = BetaPrime(2.29201,108.029)
@@ -120,8 +120,11 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #redraw the sample so that it fits to the number of inhabitants
     #okay performance for 5 digits, for 6 performance starts to tank but highest nodesize is 23379 so its probably okay
     sample = rand(household_distribution,nodecount)
+    n = 1
     while sum(sample) != inhabitants
         sample = rand(household_distribution,nodecount)
+        n+=1
+        n == 1000 && (sample = [inhabitants])
     end
     #for all newly added nodes, set the household of #sample[i] agents to it.
     #we thereby generate sampled households
@@ -138,6 +141,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #adding friendgroup, same behavior, select random nodes
     nodecount = Int(round(inhabitants/11))
     nodes = rand(possible_nodes,nodecount)
+    length(nodes) == 0 && (nodes = [rand(possible_nodes)])
     #from sinus institut, get friend size groups
     friend_distribution = Normal(11,3)
     sample = Int.(round.(rand(friend_distribution,nodecount)))
@@ -145,17 +149,18 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(friend_distribution,nodecount)))
         n+=1
-        n == 100 && (sample = [inhabitants])
+        n == 1000 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the social groups up
+    #sanity check if groups are too small, then make only one group
     if length(sample) == 1
         hhhere = sample[1]
-        push!(social_groups,nodes[1])
+        value = rand(nodes)
+        push!(social_groups,value)
         for i in 1:hhhere
-            agent_properties[agent_index+i].socialgroup = nodes[1]
+            agent_properties[agent_index+i].socialgroup = value
         end
-        agent_index = agent_index+hhhere
     else
         for (index,value) in enumerate(nodes)
             hhhere = sample[index]
@@ -170,24 +175,35 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #adding distnant groups, representing sport and shopping behavior
     nodecount = Int(round(inhabitants/20))
     nodes = rand(possible_nodes,nodecount)
+    length(nodes) == 0 && (nodes = [rand(possible_nodes)])
     #from sinus institut, get friend size groups
     distant_distribution = Normal(20,5)
     sample = Int.(round.(rand(distant_distribution,nodecount)))
     n = 1
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(distant_distribution,nodecount)))
-        # n+=1
-        # n == 100 && (sample = [inhabitants])
+        n+=1
+        n == 1000 && (sample = [inhabitants])
     end
     agent_index = 0
+
     #fill the distant groups
-    for (index,value) in enumerate(nodes)
-        hhhere = sample[index]
+    if length(sample) == 1
+        hhhere = sample[1]
+        value = rand(possible_nodes)
         push!(distant_groups,value)
         for i in 1:hhhere
             agent_properties[agent_index+i].distantgroup = value
         end
-        agent_index = agent_index+hhhere
+    else
+        for (index,value) in enumerate(nodes)
+            hhhere = sample[index]
+            push!(distant_groups,value)
+            for i in 1:hhhere
+                agent_properties[agent_index+i].distantgroup = value
+            end
+            agent_index = agent_index+hhhere
+        end
     end
 
     #get people in school age
@@ -406,7 +422,7 @@ function setup(params)
 
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
-    correction_factor = nv(nodes)/100
+    correction_factor = nv(nodes)
 
     #set up the variables, structs etc.
     space = GraphSpace(nodes)

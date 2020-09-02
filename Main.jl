@@ -1,7 +1,5 @@
-using PackageCompiler,Distributed, ClusterManagers
-addprocs(SlurmManager(1), t="01:5:00")
+using PackageCompiler,Distributed, ClusterManagers, JLD2
 @everywhere using Agents, Random, DataFrames, LightGraphs, CSV, Plots
-
 include("SpatialSetup.jl") #exports setup
 #include("agent_functions.jl") #exports agent_step
 include("visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long)
@@ -9,7 +7,6 @@ include("visualization.jl")# exports draw_route(model,lat,long) and draw_map(mod
 include("UtilityFunctions.jl")# exports add_infected(number),reset_infected(model)
 include("Validation.jl")#exports nothing so far
 include("SteppingFunction.jl")#exports agent_week!
-
 #agent and params setup
 @everywhere mutable struct DemoAgent <: AbstractAgent
     id::Int
@@ -48,10 +45,13 @@ parameters = Dict(
             :death_rate=> 0.047,
             :days_passed => 0)
 
-print("done with loading of basic code")
-#=
+#@save "workspacefile.jl" model social_groups distant_groups lat long
+@load "workspacefile.jl" model social_groups distant_groups lat long
+println("loaded workspacefile")
+
 #initialize the model and generate the map - takes about 115s for 13.000 agents
-model,lat,long, social_groups, distant_groups = setup(parameters)
+#model,lat,long, social_groups, distant_groups = setup(parameters)
+
 #add workers and make the packages available for all of them
 addprocs(SlurmManager(7), t="01:5:00")
 
@@ -84,6 +84,8 @@ end
 @eval @everywhere model = $model
 @eval @everywhere social_groups = $social_groups
 @eval @everywhere distant_groups = $distant_groups
+
+println("finished setting up data")
 
 #create a run with 8 simulations
 print(run_multiple_both(model,social_groups,distant_groups,1,8))
