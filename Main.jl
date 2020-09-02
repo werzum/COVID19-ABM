@@ -89,3 +89,7 @@ println("finished setting up data")
 
 #create a run with 8 simulations
 print(run_multiple_both(model,social_groups,distant_groups,1,8))
+
+for i in workers()
+	rmprocs(i)
+end

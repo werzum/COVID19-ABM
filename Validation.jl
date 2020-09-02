@@ -16,7 +16,8 @@ function validate_fear(steps)
     reset_infected(model)
     add_infected(1)
     b = agent_week!(model, social_groups, distant_groups,steps,false)
-    csv_raw = CSV.read("SourceData\\fear_yougov.csv";delim=";")
+    csv_raw = DataFrame!(CSV.File(joinpath("SourceData","zensus.csv");delim=";"))
+    #csv_raw = CSV.read(joinpath("SourceData","fear_yougov.csv");delim=";")
     DataFrames.rename!(csv_raw,[:x,:y])
     csv_raw.x = [round(parse(Float16,replace(x,","=>"."))) for x in csv_raw.x]
     csv_raw.y = [round(parse(Float16,replace(x,","=>"."))) for x in csv_raw.y]
@@ -140,7 +141,7 @@ function run_multiple_behavior(model,social_groups,distant_groups,steps,replicat
     infected = infected[:,setdiff(1:end,1)]
     infected = mean(infected,dims=2)
     println(infected)
-    csv_raw = CSV.read("SourceData\\Mobility_Data.csv")
+    csv_raw = CSV.read(joinpath("SourceData","Mobility_Data.csv"))
     Plots.plot(csv_raw.Value,label="behavior_real")
     display(plot!(infected,label="behavior_model"))
 
@@ -168,7 +169,7 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     fear = fear[:,setdiff(1:end,1)]
     fear = mean(fear,dims=2)
     #get the case data from germany
-    csv_raw = CSV.read("SourceData\\fear_yougov.csv";delim=";")
+    csv_raw = DataFrame!(CSV.File(joinpath("SourceData","fear_yougov.csv");delim=";"))
     DataFrames.rename!(csv_raw,[:x,:y])
     csv_raw.x = [round(parse(Float16,replace(x,","=>"."))) for x in csv_raw.x]
     csv_raw.y = [round(parse(Float16,replace(x,","=>"."))) for x in csv_raw.y]
@@ -183,11 +184,9 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     fear_yougov = vcat(fear_yougov_prepend,csv_raw.y)
     #scale it to 100
     fear_yougov = fear_yougov.*2
-    csv_raw = CSV.read("SourceData\\Mobility_Data.csv")
+    csv_raw = DataFrame!(CSV.File(joinpath("SourceData","Mobility_Data.csv");delim=";"))
 
-
-
-    csv_infections = CSV.read("SourceData\\covid19_ECDC.csv")
+    csv_infections = DataFrame!(CSV.File(joinpath("SourceData","covid19_ECDC.csv");delim=";"))
     csv_infections = filter(x -> x[Symbol("Country/Region")] == "Germany",csv_infections)
     #get cases from the 14.02., the start date of the model and five more months
     csv_infections = csv_infections.infections[46:200]
