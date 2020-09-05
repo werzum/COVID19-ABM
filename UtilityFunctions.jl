@@ -1,6 +1,10 @@
 function add_infected(x)
     for i in 1:x
         agent = random_agent(model)
+        #have at least two other contacts so we dont initialize in some underpopulated position
+        while length(get_node_contents(agent.pos, model)) < 3
+            agent = random_agent(model)
+        end
         agent.health_status = :E
     end
 end

@@ -116,23 +116,67 @@ function run_multiple_behavior(model,social_groups,distant_groups,steps,replicat
     return error
 end
 
-function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
+function run_multiple_both(model,social_groups,distant_groups,steps,replicates,enable_bootstrap)
     reset_model_parallel(1)
     all_data = pmap(j -> agent_week!(deepcopy(model),social_groups,distant_groups,steps,false), 1:replicates)
     behavior = Array{Int32}(undef,steps*7)
+    fear = Array{Int32}(undef,steps*7)
+    infected = Array{Int32}(undef,steps*7)
     for elm in all_data
         behavior = hcat(behavior,elm.mean_behavior)
-    end
-
-    behavior = behavior[:,setdiff(1:end,1)]
-    behavior = mean(behavior,dims=2)
-
-    fear = Array{Int32}(undef,steps*7)
-    for elm in all_data
+        infected = hcat(infected, elm.infected_adjusted)
         fear = hcat(fear,elm.mean_fear)
     end
+    #delete first column that has garbage in it for some reason
+    behavior = behavior[:,setdiff(1:end,1)]
     fear = fear[:,setdiff(1:end,1)]
-    fear = mean(fear,dims=2)
+    infected = infected[:,setdiff(1:end,1)]
+
+    behavior_low = Array{Float64}(undef,steps*7)
+    behavior_mean = Array{Float64}(undef,steps*7)
+    behavior_high = Array{Float64}(undef,steps*7)
+    if enable_bootstrap
+        #for each row of samples, draw 10.000 samples and calculate the 2.5% CIs
+        for row in eachrow(behavior)
+            bs1 = bootstrap(mean, row, BasicSampling(5000))
+            bs975ci = confint(bs1,PercentileConfInt(0.975))
+            #and push it to the corresponding array
+            #println(bs975ci)
+            push!(behavior_low, bs975ci[1][2])
+            push!(behavior_mean, bs975ci[1][1])
+            push!(behavior_high, bs975ci[1][3])
+        end
+    end
+
+    fear_low = Array{Float64}(undef,steps*7)
+    fear_mean = Array{Float64}(undef,steps*7)
+    fear_high = Array{Float64}(undef,steps*7)
+    if enable_bootstrap
+        #for each row of samples, draw 10.000 samples and calculate the 2.5% CIs
+        for row in eachrow(fear)
+            bs1 = bootstrap(mean, row, BasicSampling(5000))
+            bs975ci = confint(bs1,PercentileConfInt(0.975))
+            #and push it to the corresponding array
+            push!(fear_low, bs975ci[1][2])
+            push!(fear_mean, bs975ci[1][1])
+            push!(fear_high, bs975ci[1][3])
+        end
+    end
+
+    infected_low = Array{Float64}(undef,steps*7)
+    infected_mean = Array{Float64}(undef,steps*7)
+    infected_high = Array{Float64}(undef,steps*7)
+    if enable_bootstrap
+        #for each row of samples, draw 10.000 samples and calculate the 2.5% CIs
+        for row in eachrow(infected)
+            bs1 = bootstrap(mean, row, BasicSampling(5000))
+            bs975ci = confint(bs1,PercentileConfInt(0.975))
+            #and push it to the corresponding array
+            push!(infected_low, bs975ci[1][2])
+            push!(infected_mean, bs975ci[1][1])
+            push!(infected_high, bs975ci[1][3])
+        end
+    end
 
     #get the case data from germany
     csv_raw = CSV.read("SourceData\\fear_yougov.csv";delim=";")
@@ -159,29 +203,33 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates)
     csv_infections = csv_infections.infections[46:200]
     #both start with 1 infection
     csv_infections = csv_infections ./ 15
-    infected = Array{Int32}(undef,steps*7)
-    for elm in all_data
-        infected = hcat(fear,elm.infected_adjusted)
-    end
-    infected = infected[:,setdiff(1:end,1)]
-    infected = mean(infected,dims=2)
 
-    Plots.plot(csv_raw.Value.*100,label="behavior_real")
-    plot!(csv_infections,label="infected_real")
-    plot!(infected,label="infected_model")
-    plot!(fear.*100,label="fear_model")
-    plot!(fear_yougov.*100,label="fear_real")
-    display(plot!(behavior.*100,label="behavior_model"))
+    #remove leftover data that somehov gets prepended to CI data
+    fear_mean = fear_mean[length(fear_yougov):end]
+    fear_low = fear_low[length(fear_yougov):end]
+    fear_high = fear_high[length(fear_yougov):end]
+    behavior_mean = behavior_mean[length(fear_yougov):end]
+    behavior_low = behavior_low[length(fear_yougov):end]
+    behavior_high = behavior_high[length(fear_yougov):end]
+
+    # Plots.plot(csv_raw.Value.*100,label="behavior_real")
+    # plot!(csv_infections,label="infected_real")
+    # plot!(infected,label="infected_model")
+    Plots.plot(fear_mean,label="fear_model", ribbon = (fear_mean.-fear_low,fear_high.-fear_low))
+    plot!(fear_yougov,label="fear_real")
+    #display(plot!(behavior.*100,label="behavior_model", ribbon = (behavior_975ci.[2],behavior_975ci.[3])))
+    plot!(csv_raw.Value,label="behavior_real")
+    display(plot!(behavior_mean,label="behavior_model", ribbon = (behavior_mean.-behavior_low,behavior_high.-behavior_mean)))
 
 
-    error = mape(csv_raw.Value,behavior)
+    error = mape(csv_raw.Value,behavior_mean)
     println("error behavior is $error")
-    println("behavior data is $behavior")
-    error = mape(fear_yougov,fear)
+    #println("behavior data is $behavior")
+    error = mape(fear_yougov,fear_mean)
     println("error fear is $error")
-    println("fear data is $fear")
-    error = mape(csv_infections,infected)
+    #println("fear data is $fear")
+    error = mape(csv_infections,infected_mean)
     println("error infected is $error")
-    println("infected data is $infected")
+    #println("infected data is $infected")
     return error
 end
