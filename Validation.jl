@@ -119,6 +119,7 @@ end
 function run_multiple_both(model,social_groups,distant_groups,steps,replicates,enable_bootstrap)
     reset_model_parallel(1)
     all_data = pmap(j -> agent_week!(deepcopy(model),social_groups,distant_groups,steps,false), 1:replicates)
+    println("finished computation of data")
     behavior = Array{Int32}(undef,steps*7)
     fear = Array{Int32}(undef,steps*7)
     infected = Array{Int32}(undef,steps*7)
@@ -139,7 +140,7 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
         #for each row of samples, draw 10.000 samples and calculate the 2.5% CIs
         for row in eachrow(behavior)
             bs1 = bootstrap(mean, row, BasicSampling(5000))
-            bs975ci = confint(bs1,PercentileConfInt(0.975))
+            bs975ci = confint(bs1,PercentileConfInt(0.95))
             #and push it to the corresponding array
             #println(bs975ci)
             push!(behavior_low, bs975ci[1][2])
@@ -155,7 +156,7 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
         #for each row of samples, draw 10.000 samples and calculate the 2.5% CIs
         for row in eachrow(fear)
             bs1 = bootstrap(mean, row, BasicSampling(5000))
-            bs975ci = confint(bs1,PercentileConfInt(0.975))
+            bs975ci = confint(bs1,PercentileConfInt(0.95))
             #and push it to the corresponding array
             push!(fear_low, bs975ci[1][2])
             push!(fear_mean, bs975ci[1][1])
@@ -170,7 +171,7 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
         #for each row of samples, draw 10.000 samples and calculate the 2.5% CIs
         for row in eachrow(infected)
             bs1 = bootstrap(mean, row, BasicSampling(5000))
-            bs975ci = confint(bs1,PercentileConfInt(0.975))
+            bs975ci = confint(bs1,PercentileConfInt(0.95))
             #and push it to the corresponding array
             push!(infected_low, bs975ci[1][2])
             push!(infected_mean, bs975ci[1][1])
@@ -202,25 +203,40 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     #get cases from the 14.02., the start date of the model and five more months
     csv_infections = csv_infections.infections[46:200]
     #both start with 1 infection
-    csv_infections = csv_infections ./ 15
+    csv_infections = csv_infections ./ 50
+
 
     #remove leftover data that somehov gets prepended to CI data
-    fear_mean = fear_mean[length(fear_yougov):end]
-    fear_low = fear_low[length(fear_yougov):end]
-    fear_high = fear_high[length(fear_yougov):end]
-    behavior_mean = behavior_mean[length(fear_yougov):end]
-    behavior_low = behavior_low[length(fear_yougov):end]
-    behavior_high = behavior_high[length(fear_yougov):end]
+    timeline_gap = length(fear_mean)-steps*7+1
+    fear_mean = fear_mean[timeline_gap:end]
+    fear_low = fear_low[timeline_gap:end]
+    fear_high = fear_high[timeline_gap:end]
+    behavior_mean = behavior_mean[timeline_gap:end]
+    behavior_low = behavior_low[timeline_gap:end]
+    behavior_high = behavior_high[timeline_gap:end]
+    infected_mean = infected_mean[timeline_gap:end]
+    infected_low = infected_low[timeline_gap:end]
+    infected_high = infected_high[timeline_gap:end]
+
+    fear_return = (fear_low,fear_mean,fear_high)
+    behavior_return = (behavior_low,behavior_mean,behavior_high)
+    infected_return = (infected_low,infected_mean,infected_high)
+
+    fear_yougov = fear_yougov[1:steps*7]
+    behavior_real = csv_raw.Value[1:steps*7]
+    csv_infections = csv_infections[1:steps*7]
+
 
     # Plots.plot(csv_raw.Value.*100,label="behavior_real")
     # plot!(csv_infections,label="infected_real")
     # plot!(infected,label="infected_model")
-    Plots.plot(fear_mean,label="fear_model", ribbon = (fear_mean.-fear_low,fear_high.-fear_low))
+    Plots.plot(fear_mean,label="fear_model", ribbon = (fear_mean.-fear_low,fear_high.-fear_low),legend=:bottomright)
     plot!(fear_yougov,label="fear_real")
-    #display(plot!(behavior.*100,label="behavior_model", ribbon = (behavior_975ci.[2],behavior_975ci.[3])))
-    plot!(csv_raw.Value,label="behavior_real")
+    plot!(behavior_real,label="behavior_real")
     display(plot!(behavior_mean,label="behavior_model", ribbon = (behavior_mean.-behavior_low,behavior_high.-behavior_mean)))
 
+    Plots.plot(infected_mean,label="infected_model", ribbon = (infected_mean.-infected_low,infected_mean.-infected_low),legend=:bottomright)
+    display(plot!(csv_infections,label="infected_real"))
 
     error = mape(csv_raw.Value,behavior_mean)
     println("error behavior is $error")
@@ -231,5 +247,28 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     error = mape(csv_infections,infected_mean)
     println("error infected is $error")
     #println("infected data is $infected")
-    return error
+
+    #MAPEs
+    error = mape(fear_yougov,fear_mean)
+    println("error fear is $error")
+    error = mape(behavior_real,behavior_mean)
+    println("error behavior is $error")
+    error = mape(csv_infections,infected_mean)
+    println("error infected is $error")
+    #compute RMSE
+    println("RMSE Fear is $(Distances.nrmsd(fear_mean,fear_yougov))")
+    println("RMSE Behavior is $(Distances.nrmsd(behavior_mean,behavior_real))")
+    println("RMSE Infected is $(Distances.nrmsd(infected_mean,csv_infections))")
+    #compute MAE%
+    println("MAE% Fear is $(Distances.meanad(fear_mean,fear_yougov)/mean(fear_yougov))")
+    println("MAE% Behavior is $(Distances.meanad(behavior_mean,behavior_real)/mean(behavior_real))")
+    println("MAE% Infected is $(Distances.meanad(infected_mean,csv_infections)/mean(csv_infections))")
+    #compute F-Test
+    println("F-Test Fear is $(VarianceFTest(fear_mean,fear_yougov))")
+    println("F-Test Behavior is $(VarianceFTest(behavior_mean,behavior_real))")
+    println("F-Test Infected is $(VarianceFTest(csv_infections,infected_mean))")
+    return (fear_return,behavior_return,infected_return)
 end
+
+#result =
+print(run_multiple_both(model,social_groups,distant_groups,12,6,true))
