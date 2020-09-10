@@ -8,6 +8,7 @@
     attitude, norms = read_message_data()
     #create a vector of plots if we want to create a GIF of the spread
     paint_mode && (plot_vector = Vector{Compose.Context}(undef,0))
+    #adding one infected here so its truly random
     add_infected(1,model)
     for step in 1:steps
         for i in 1:7
@@ -51,8 +52,8 @@
             #delay the reported infections by two days as Verzug COronadaten shows https://www.ndr.de/nachrichten/info/Coronavirus-Neue-Daten-stellen-Epidemie-Verlauf-infrage,corona2536.html
             #nowcast shows 3 days delay and 10% less infected as report delay
             length(infected_timeline)<4 ? model.infected_reported=last(infected_timeline)*0.9 : model.infected_reported = infected_timeline[length(infected_timeline)-3]
-            # println("infected timeline is $infected_timeline")
-            # println("infected growth is $infected_timeline_growth")
+            println("infected timeline is $infected_timeline")
+            println("infected growth is $infected_timeline_growth")
             # println("at time $(model.days_passed)")
             #and add the data to the dataframe
             append!(agent_data,day_data)
@@ -81,7 +82,7 @@ end
 @everywhere function send_messages(day,attitude,norms)
     attitude_message_frequency = round(attitude_frequency(day,attitude))
     norm_message_frequency = round(norm_frequency(day,norms))
-    println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
+    #println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
     if day % attitude_message_frequency == 0
         #println("sent attitude!!!")
         send_attitude()
@@ -122,7 +123,7 @@ end
     #lambda = max attainable fear factor -> 2?
     #us - unconditioned stimuli, cs - conditioned stimuli -> merge both to one stimuli, cases
     #return fear change of 1 if both rates are 1
-    return Int16(round(100*2*(1-ℯ^(-case_growth*personal_cases))))
+    return Int16(round(100*1.4*(1-ℯ^(-case_growth*personal_cases))))
 end
 
 @everywhere function property_growth(property)
@@ -150,7 +151,7 @@ end
 
 @everywhere function fear_decay(fear,time)
     #modify fear so that it decays over time
-    return (fear-0.5)
+    return (fear-2)
 end
 
 @everywhere function case_growth(today,before)
@@ -200,14 +201,14 @@ end
 
             #if our route coincides with the daily route of others
             if (possible_edges>0)
-                agent.behavior > 60 ? risk = 3.66 : risk = 9.5
+                agent.behavior > 50 ? risk = 0.366 : risk = 9.5
                 #use agent wealth as additional factor
                 wealth_modificator = agent.wealth/219
                 wealth_modificator < 0.01 && (wealth_modificator = 0.01)
                 wealth_modificator > 1.9 && (wealth_modificator = 1.9)
                 #risk increases when agentf
                 risk=risk*(2-wealth_modificator)
-                risk = risk*0.8
+                risk = risk*0.64
                 #test for adjusting infection frequencys
                 #see if the agent gets infected. Risk is taken from Chu 2020, /100 for scale and *0.03 for mossong travel rate of 3 perc of contacts and /10 for scale
                 if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
@@ -242,13 +243,7 @@ end
             end
         elseif time_of_day == :social && in(agent.socialgroup, social_active_group)
             #skip social interaction, ie. social distancing, when behavior is active and everything is closed
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 60 && rand()<0.9
-                return
-            end
-            move = move_infect!(agent)
-            move == true && move_agent!(agent,agent.socialgroup,model)
-        elseif time_of_day == :social && in(agent.distantgroup, distant_active_group)
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 60 && rand()<0.9
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 50 && rand()<0.9
                 return
             end
             move = move_infect!(agent)
@@ -312,12 +307,14 @@ end
         #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
         #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
         #infected_growth = last(infected_timeline_growth)/50
-        if length(infected_timeline)>3
-            daily_cases = infected_timeline[end-2] - infected_timeline[end-3]
+        if length(infected_timeline)>4
+            daily_cases = infected_timeline_growth[end-3]# - infected_timeline_growth[end-6])/4
         else
-            daily_cases = infected_timeline[end]
+            daily_cases = infected_timeline_growth[end]
         end
-        daily_cases = daily_cases/(nagents(model)/45)
+        #adjust the fear of daily cases to population size
+        daily_cases = scale(0,100,0.5,2,daily_cases-100)#daily_cases/(nagents(model)/45)
+        daily_cases < 0 && (daily_cases = 0)
         acquaintances_infected_now = acquaintances_infected/15
         new_fear = fear_growth(daily_cases,acquaintances_infected_now)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
@@ -335,25 +332,26 @@ end
         elseif new_fear < old_fear*0.9
             new_fear = old_fear*0.9
         end
-        #agent.fear = new_fear
+
         #get the new fear and add it to the fear history
         push!(agent.fear_history, new_fear)
         #calculate the average fear we use for the behavior calc
         if length(agent.fear_history)>20
-            agent.fear = mean(agent.fear_history[end-20:end])
+            agent.fear = mean(agent.fear_history[end-19:end])
         else
             agent.fear = mean(agent.fear_history)
         end
+        #agent.fear = mean(agent.fear_history)
 
         #agent behavior is computed as (norm + attitude)/2 + decay(threat)
         old_behavior = agent.behavior
         #reduced influence of fear so that messages can take over when due
-        new_behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/100)))
+        new_behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/80)))
 
         #catch the Initialization of behavior
         old_behavior == 0 && (old_behavior = new_behavior)
         #check boundaries
-        #(new_behavior < 0 || new_behavAior > 200) && (new_behavior=60)
+        #(new_behavior < 0 || new_behavior > 200) && (new_behavior=60)
         #prevent new behavior from jumping around too fast, a one-day stall in infection could reduce behavior too strong
 
         if new_behavior>old_behavior*1.4
@@ -371,7 +369,6 @@ end
     end
 
     function transmit!(agent, model)
-        #increment the sickness state of immune agents
         #skip transmission for non-sick agents
         !in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) && return
         #also skip if exposed, but not yet infectious. RKI Steckbrief says 2 days before onset of symptoms
@@ -381,22 +378,22 @@ end
         prop = model.properties
 
         #mean rate Chu 2020 f
-        risk = if agent.behavior > 60
-            0.0366
+        risk = if agent.behavior > 50
+            0.00366
         else
             0.095
         end
         #rate of secondary infections in household very high, Wei Li 2020, but at least contained to household
         if agent.health_status == :Q
-            if agent.behavior > 60
-                risk = 0.0063
+            if agent.behavior > 50
+                risk = 0.00163
             else
                 risk = 0.0163
             end
         end
 
         #test for infection curve
-        risk = risk*0.8
+        risk = risk*0.64
 
         #infect the number of contacts and then return
         #get node of agent, skip if only him
@@ -417,7 +414,7 @@ end
         else
             contacts*=0.26
         end
-        contacts = round(contacts*0.8)
+        contacts = round(contacts)
         #check if age_contacts bigger than available agents, set it then to the #available agents
         if contacts > length(node_contents) - 1
             contacts = length(node_contents) - 1

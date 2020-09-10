@@ -1,4 +1,4 @@
-function add_infected(x)
+@everywhere function add_infected(x,model)
     for i in 1:x
         agent = random_agent(model)
         #have at least two other contacts so we dont initialize in some underpopulated position
@@ -22,7 +22,7 @@ end
 
 function reset_model_parallel(agents)
     reset_infected(model)
-    add_infected(agents)
+    #add_infected(agents)
     @eval @everywhere model = $model
 end
 

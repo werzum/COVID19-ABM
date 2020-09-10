@@ -3,14 +3,14 @@ using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes,
 function create_node_map()
     #OSM is obtained best from https://protomaps.com/extracts/b6fd95e9-cb6b-40b7-b58b-acbead2e2643 for easy node selection
     #get map data and its inbounds
-    aachen_map = get_map_data("SourceData\\aachen_test3.osm", use_cache=false, only_intersections=true)
+    aachen_map = get_map_data(joinpath("SourceData","aachen_even_bigger.osm"), use_cache=false, only_intersections=true)
     aachen_graph = aachen_map.g
     bounds = aachen_map.bounds
 
     #use the raw parseOSM function to obtain nodes tagged with "school"
-    aachen_schools = OpenStreetMapX.parseOSM("SourceData\\aachen_test3.osm")
-    aachen_schools_nodes = filter((k,v) -> v[2] == "school", aachen_schools.features)
-    aachen_schools = filter(key -> haskey(aachen_schools_nodes,key.first),aachen_schools.nodes)
+    aachen_schools = OpenStreetMapX.parseOSM(joinpath("SourceData","aachen_even_bigger.osm"))
+    aachen_schools_nodes = [key for (key,value) in aachen_schools.features if value[2]=="school"]
+    aachen_schools = Dict([key => value for (key,value) in aachen_schools.nodes if in(key,aachen_schools_nodes)])
 
     #lat long of Aachen as reference frame
     LLA_ref = LLA((bounds.max_y+bounds.min_y)/2, (bounds.max_x+bounds.min_x)/2, 266.0)
@@ -44,8 +44,8 @@ function create_node_map()
 end
 
 function create_demography_map()
-    rawdata = DataFrame!(CSV.File("SourceData\\zensus.csv"))
-    #make sure properties are symbols
+    rawdata = DataFrame!(CSV.File(joinpath("SourceData","zensus.csv")))
+    #make sure properties are symboml
     colsymbols = propertynames(rawdata)
     DataFrames.rename!(rawdata,colsymbols)
     #@time plot(rawdata.X,rawdata.Y)
@@ -70,7 +70,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
 
     #get the number of inhabitants, women, old people etc for the current grid
     inhabitants = Int(round(mean(group.Einwohner)/(correction_factor/1000)))
-    inhabitants == 0 && return
+    inhabitants < 2 && return
     println("working at next group with $inhabitants inhabitants")
     women = get_amount(inhabitants,group.Frauen_A)
     age = Int(round(mean(group.Alter_D)))
@@ -83,17 +83,18 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #fill array with default agents of respective amount of agents with young/old age and gender
     agent_properties = Vector{agent_tuple}(undef,inhabitants)
     undef_vector = LightGraphs.SimpleGraphs.SimpleEdge{Int64}[]
+    undef_history = Vector{Float32}(undef,0)
     for x in 1:inhabitants
-        agent_properties[Int(x)] = agent_tuple(:S,0,0,0,0,0,0,false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector)
+        agent_properties[Int(x)] = agent_tuple(:S,0,0,0,0,0,0,false,age,0,0,0,0,0,undef_vector,undef_vector,undef_vector,undef_history)
     end
 
     #randomly set women and young/old inhabitants
     [agent.women = true for agent in agent_properties[1:women]]
     shuffle!(agent_properties)
     [agent.age = rand(1:17) for agent in agent_properties[1:below18]]
+    #check if there are enough agents before setting the share to old age
     [agent.age = rand(66:110) for agent in agent_properties[below18+1:(below18+1+over65)]]
     shuffle!(agent_properties)
-    #TODO komische Verteilung: falsch gezogene Werte werden an max/min Position gesetzt?
 
     #shuffle the agent_properties, sample #inhabitants, map it to the desired range and assign those to the agent properties
     wealth_distribution = BetaPrime(2.29201,108.029)
@@ -120,8 +121,11 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #redraw the sample so that it fits to the number of inhabitants
     #okay performance for 5 digits, for 6 performance starts to tank but highest nodesize is 23379 so its probably okay
     sample = rand(household_distribution,nodecount)
+    n = 1
     while sum(sample) != inhabitants
         sample = rand(household_distribution,nodecount)
+        n+=1
+        n == 1000 && (sample = [inhabitants])
     end
     #for all newly added nodes, set the household of #sample[i] agents to it.
     #we thereby generate sampled households
@@ -138,6 +142,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #adding friendgroup, same behavior, select random nodes
     nodecount = Int(round(inhabitants/11))
     nodes = rand(possible_nodes,nodecount)
+    length(nodes) == 0 && (nodes = [rand(possible_nodes)])
     #from sinus institut, get friend size groups
     friend_distribution = Normal(11,3)
     sample = Int.(round.(rand(friend_distribution,nodecount)))
@@ -145,22 +150,33 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(friend_distribution,nodecount)))
         n+=1
-        n == 1 && (sample = [inhabitants])
+        n == 1000 && (sample = [inhabitants])
     end
     agent_index = 0
     #fill the social groups up
-    for (index,value) in enumerate(nodes)
-        hhhere = sample[index]
+    #sanity check if groups are too small, then make only one group
+    if length(sample) == 1
+        hhhere = sample[1]
+        value = rand(nodes)
         push!(social_groups,value)
         for i in 1:hhhere
             agent_properties[agent_index+i].socialgroup = value
         end
-        agent_index = agent_index+hhhere
+    else
+        for (index,value) in enumerate(nodes)
+            hhhere = sample[index]
+            push!(social_groups,value)
+            for i in 1:hhhere
+                agent_properties[agent_index+i].socialgroup = value
+            end
+            agent_index = agent_index+hhhere
+        end
     end
 
     #adding distnant groups, representing sport and shopping behavior
     nodecount = Int(round(inhabitants/20))
     nodes = rand(possible_nodes,nodecount)
+    length(nodes) == 0 && (nodes = [rand(possible_nodes)])
     #from sinus institut, get friend size groups
     distant_distribution = Normal(20,5)
     sample = Int.(round.(rand(distant_distribution,nodecount)))
@@ -168,17 +184,27 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     while sum(sample) != inhabitants
         sample = Int.(round.(rand(distant_distribution,nodecount)))
         n+=1
-        n == 1 && (sample = [inhabitants])
+        n == 1000 && (sample = [inhabitants])
     end
     agent_index = 0
+
     #fill the distant groups
-    for (index,value) in enumerate(nodes)
-        hhhere = sample[index]
+    if length(sample) == 1
+        hhhere = sample[1]
+        value = rand(possible_nodes)
         push!(distant_groups,value)
         for i in 1:hhhere
             agent_properties[agent_index+i].distantgroup = value
         end
-        agent_index = agent_index+hhhere
+    else
+        for (index,value) in enumerate(nodes)
+            hhhere = sample[index]
+            push!(distant_groups,value)
+            for i in 1:hhhere
+                agent_properties[agent_index+i].distantgroup = value
+            end
+            agent_index = agent_index+hhhere
+        end
     end
 
     #get people in school age
@@ -233,7 +259,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
         end
         agent_social_route = a_star(model.space.graph,agent.household,agent.socialgroup)
         agent_distant_route = a_star(model.space.graph,agent.household,agent.distantgroup)
-        add_agent!(agent.household, model, agent.health_status, agent.days_infected, agent.attitude, agent.original_attitude, agent.fear, agent.behavior, agent.acquaintances_growth, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route)
+        add_agent!(agent.household, model, agent.health_status, agent.days_infected, agent.attitude, agent.original_attitude, agent.fear, agent.behavior, agent.acquaintances_growth, agent.women, agent.age, agent.wealth, agent.household, agent.workplace, agent.socialgroup, agent.distantgroup, agent_workplace_route, agent_social_route, agent_distant_route, agent.fear_history)
     end
     return
 end
@@ -384,22 +410,21 @@ mutable struct agent_tuple
     workplaceroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
     socialroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
     distantroute::Vector{LightGraphs.SimpleGraphs.SimpleEdge{Int64}}
+    fear_history::Vector{Float32}
 end
 
 function setup(params)
 
     #create the nodemap and rawdata demography map and set the bounds for it
-    r1 = @spawn create_node_map()
-    r2 = @spawn create_demography_map()
-    nodes,long,lat,bounds,schools,map_data = fetch(r1)
-    rawdata = fetch(r2)
+    nodes,long,lat,bounds,schools,map_data = create_node_map()
+    rawdata = create_demography_map()
     println("loaded raw data")
     #get the grid data within the boundaries of the node map
     working_grid = rawdata[(rawdata.X .> bounds.min_x) .& (rawdata.X .< bounds.max_x) .& (rawdata.Y .> bounds.min_y).& (rawdata.Y .< bounds.max_y),:]
 
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
-    correction_factor = nv(nodes)
+    correction_factor = nv(nodes)/2
 
     #set up the variables, structs etc.
     space = GraphSpace(nodes)
