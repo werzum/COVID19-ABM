@@ -26,14 +26,11 @@
             infected_edges = Vector{Int32}(undef,0)
             #to avoid costly recomputation in behavior, we collect all agents once and then use it in behavior
             all_agents = collect(allagents(model))
-            #println("mean behavior is $(mean([agent.behavior for agent in all_agents]))")
-            #println("mean fear is $(mean([agent.fear for agent in all_agents]))")
 
             #run the model
             day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
             #update the count of infected now and reported
-            #since actual cases are about 1,8x higher than reported cases, divide this (https://www.mpg.de/14906897/0604-defo-137749-wie-viele-menschen-haben-tatsaechlich-covid-19)
-            infected_count = last(infected_timeline)+model.properties[:daily_cases]#round(sum([in(agent.health_status, (:E,:IwS,:NQ,:Q,:HS)) for agent in  all_agents]))
+            infected_count = last(infected_timeline)+model.properties[:daily_cases]
             push!(infected_timeline,infected_count)
 
             #get the current case growth
@@ -81,7 +78,7 @@ end
 @everywhere function send_messages(day,attitude,norms)
     attitude_message_frequency = round(attitude_frequency(day,attitude))
     norm_message_frequency = round(norm_frequency(day,norms))
-    println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
+    #println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
     if day % attitude_message_frequency == 0
         #println("sent attitude!!!")
         send_attitude()
@@ -223,11 +220,11 @@ end
         #check which time of day it is, then calculate move infection if not in quarantine, and finally move the agent
         if time_of_day == :work && agent.workplace != 0
             #20% stay at home during covid contact prohibition
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && rand()<0.498
+            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && 19 < agent.age <63 && rand()<0.498
                 return
             end
-            #schools close at the same time as workplaces and affect all pupils
-            if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && (4 < agent.age <19)
+            #schools mostly closed, opening about in august
+            if model.properties[:work_closes] < model.properties[:days_passed] < 175  && (4 < agent.age <19)
                 return
             end
             #on the weekends, only ~20% go to work https://www.destatis.de/DE/Themen/Arbeit/Arbeitsmarkt/Qualitaet-Arbeit/Dimension-3/wochenendarbeitl.html
@@ -339,8 +336,8 @@ end
         #get the new fear and add it to the fear history
         push!(agent.fear_history, new_fear)
         #calculate the average fear we use for the behavior calc
-        if length(agent.fear_history)>20
-            agent.fear = mean(agent.fear_history[end-20:end])
+        if length(agent.fear_history)>6
+            agent.fear = mean(agent.fear_history[end-6:end])
         else
             agent.fear = mean(agent.fear_history)
         end
@@ -437,7 +434,6 @@ end
         #trying to infect n others in this node, timeout if in a node without eligible neighbors
         while infect_people > 0 && t < timeout
             target = model[rand(node_contents)]
-            #TODO add the product of individual protection and and target protection - keeping it real simple for now
             if target.health_status == :S
                 model.properties[:daily_cases]+=1
                 target.health_status = :E
