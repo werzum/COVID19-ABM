@@ -47,12 +47,13 @@ function get_validation_data()
     #starting at the 16.03.
     #adding the missing month, since the graph only starts from the 16.03. and not as the model the 14.02.
     fear_yougov = vcat(fear_yougov_prepend,csv_raw.y)
-    #scale it to 100
-    fear_real = fear_yougov.*2
+    #scale it to 125
+    fear_real = fear_yougov.*2.7
 
     #get behavior data
     csv_raw = CSV.read("SourceData\\Mobility_Data.csv")
     behavior_real = csv_raw.Value
+    behavior_real = behavior_real.*1.4
 
     #get infection data
     csv_infections = CSV.read("SourceData\\covid19_ECDC.csv")
@@ -60,7 +61,7 @@ function get_validation_data()
     #get cases from the 14.02., the start date of the model and five more months
     csv_infections = csv_infections.infections[46:200]
     #both start with 1 infection
-    infections_real = csv_infections ./ 15
+    infections_real = csv_infections ./ 25
 
     return fear_real, behavior_real, infections_real
 end
