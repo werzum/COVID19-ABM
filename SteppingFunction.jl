@@ -49,7 +49,7 @@
             #nowcast shows 3 days delay and 10% less infected as report delay
             length(infected_timeline)<4 ? model.infected_reported=last(infected_timeline)*0.9 : model.infected_reported = infected_timeline[length(infected_timeline)-3]
             # println("infected timeline is $infected_timeline")
-            # println("infected growth is $infected_timeline_growth")
+            #println("infected growth is $infected_timeline_growth")
             # println("at time $(model.days_passed)")
             #and add the data to the dataframe
             append!(agent_data,day_data)
@@ -119,7 +119,7 @@ end
     #lambda = max attainable fear factor -> 2?
     #us - unconditioned stimuli, cs - conditioned stimuli -> merge both to one stimuli, cases
     #return fear change of 1 if both rates are 1
-    return Int16(round(100*2*(1-ℯ^(-case_growth*personal_cases))))
+    return Int16(round(100*2.2*(1-ℯ^(-case_growth*personal_cases))))
 end
 
 @everywhere function property_growth(property)
@@ -147,7 +147,7 @@ end
 
 @everywhere function fear_decay(fear,time)
     #modify fear so that it decays over time
-    return (fear-0.5)
+    return fear*ℯ^(-(time/150))
 end
 
 @everywhere function case_growth(today,before)
@@ -219,27 +219,32 @@ end
     function move_step!(agent, model)
         #check which time of day it is, then calculate move infection if not in quarantine, and finally move the agent
         if time_of_day == :work && agent.workplace != 0
-            #20% stay at home during covid contact prohibition
             if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && 19 < agent.age <63 && rand()<0.498
                 return
             end
-            #schools mostly closed, opening about in august
+            #schools closed, opening about in august
             if model.properties[:work_closes] < model.properties[:days_passed] < 175  && (4 < agent.age <19)
                 return
             end
-            #on the weekends, only ~20% go to work https://www.destatis.de/DE/Themen/Arbeit/Arbeitsmarkt/Qualitaet-Arbeit/Dimension-3/wochenendarbeitl.html
-            if length(social_active_group)==Int(round(length(social_groups)/3))
-                if rand() < 0.0276
-                    move = move_infect!(agent)
-                    move == true && move_agent!(agent,agent.workplace,model)
-                end
-            else
-                move = move_infect!(agent)
-                move == true && move_agent!(agent,agent.workplace,model)
+            #gradually reopening work
+            percent_sd = (model.properties[:days_passed]-60)/50
+            if model.properties[:days_passed] > model.properties[:work_opens] && rand()> percent_sd
+                return
             end
+            #on the weekends, only ~20% go to work https://www.destatis.de/DE/Themen/Arbeit/Arbeitsmarkt/Qualitaet-Arbeit/Dimension-3/wochenendarbeitl.html
+            if length(social_active_group)==Int(round(length(social_groups)/3)) && rand() > 0.0276
+                return
+            end
+            move = move_infect!(agent)
+            move == true && move_agent!(agent,agent.workplace,model)
         elseif time_of_day == :social && in(agent.socialgroup, social_active_group)
             #skip social interaction, ie. social distancing, when behavior is active and everything is closed
             if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 60 && rand()<0.9
+                return
+            end
+            #gradually increase the percentage not SD after the lockdown has ended
+            percent_sd = (model.properties[:days_passed]-60)/50
+            if model.properties[:days_passed] > model.properties[:work_opens] && rand()> percent_sd
                 return
             end
             move = move_infect!(agent)
@@ -248,8 +253,12 @@ end
             if model.properties[:work_closes] < model.properties[:days_passed] < model.properties[:work_opens] && agent.behavior > 60 && rand()<0.9
                 return
             end
+            percent_sd = (model.properties[:days_passed]-60)/50
+            if model.properties[:days_passed] > model.properties[:work_opens] && rand()> percent_sd
+                return
+            end
             move = move_infect!(agent)
-            move == true && move_agent!(agent,agent.socialgroup,model)
+            move == true && move_agent!(agent,agent.distantgroup,model)
         else
             #move back home
             move = move_infect!(agent)
@@ -316,11 +325,11 @@ end
         end
         daily_cases = daily_cases/(nagents(model)/45)
         acquaintances_infected_now = acquaintances_infected/15
-        new_fear = fear_growth(daily_cases,acquaintances_infected_now)
+        new_fear = fear_growth(daily_cases,daily_cases)#acquaintances_infected_now)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
         #and apply the exponential decay to it after two weeks and we didnt have growth for three days
 
-        if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 105,trues(3))
+        if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 104,trues(3))
             new_fear = Int16(round(fear_decay(new_fear, time)))
         end
 
@@ -345,7 +354,7 @@ end
         #agent behavior is computed as (norm + attitude)/2 + decay(threat)
         old_behavior = agent.behavior
         #reduced influence of fear so that messages can take over when due
-        new_behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/100)))
+        new_behavior = Int16(round(mean([mean_behavior,attitude])*agent.fear/100))#*(agent.fear/100)))
 
         #catch the Initialization of behavior
         old_behavior == 0 && (old_behavior = new_behavior)
@@ -359,7 +368,7 @@ end
         elseif new_behavior < old_behavior*0.9
             new_behavior = Int16(ceil(old_behavior*0.9))
         end
-        agent.behavior = new_behavior
+        agent.behavior = new_behavior#Int16(round(behavior_mean[model.properties[:days_passed]]))
         #
         # if(in(agent.id,[10,200,350,400,500,600]))
         #     println("the new fear is $(new_fear), old fear is $(old_fear) a daily cases of $daily_cases")
@@ -414,7 +423,7 @@ end
         else
             contacts*=0.26
         end
-        contacts = round(contacts*0.8)
+        contacts = round(contacts*0.7)
         #check if age_contacts bigger than available agents, set it then to the #available agents
         if contacts > length(node_contents) - 1
             contacts = length(node_contents) - 1
@@ -497,6 +506,7 @@ end
 
     #preallocate some arrays
     aquaintances_vector = Vector{Int64}(undef, length(all_agents))
+    behavior_mean = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.4, 0.4666666666666667, 0.6, 1.0, 1.2666666666666666, 1.6666666666666667, 2.4, 3.2666666666666666, 4.6, 6.333333333333333, 8.933333333333334, 12.4, 17.2, 24.133333333333333, 33.0, 43.333333333333336, 54.06666666666667, 63.333333333333336, 67.53333333333333, 68.46666666666667, 70.53333333333333, 73.13333333333334, 75.8, 77.8, 78.26666666666667, 75.93333333333334, 72.33333333333333, 69.13333333333334, 68.93333333333334, 70.4, 74.66666666666667, 73.8, 70.66666666666667, 68.93333333333334, 71.66666666666667, 73.86666666666666, 73.2, 69.86666666666666, 65.8, 65.53333333333333, 67.26666666666667, 77.06666666666666, 80.73333333333333, 84.73333333333333, 85.13333333333334, 84.26666666666667, 80.73333333333333, 77.06666666666666, 75.46666666666667, 71.06666666666666, 67.4, 67.66666666666667, 69.93333333333334, 68.8, 65.0, 60.6, 57.06666666666667, 54.733333333333334, 52.93333333333333, 51.8, 48.8, 45.93333333333333, 48.06666666666667, 48.666666666666664, 49.333333333333336, 50.06666666666667, 51.86666666666667, 52.666666666666664, 54.4, 64.73333333333333, 68.2, 66.33333333333333, 64.4, 62.46666666666667, 57.46666666666667, 52.86666666666667, 54.53333333333333, 53.86666666666667, 52.6, 51.13333333333333, 49.266666666666666, 48.4, 49.6, 56.266666666666666, 57.8, 55.46666666666667, 52.733333333333334, 50.46666666666667, 46.666666666666664, 43.53333333333333, 43.6, 41.8, 39.733333333333334, 37.46666666666667]
     #run the model - agents go to work, collect data
     time_of_day = :work
     run!(model, move_step!, 1)
