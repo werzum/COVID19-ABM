@@ -21,6 +21,7 @@ end
 function draw_map(model,lat,long)
     N = Agents.nodes(model)
     ncolor = Vector(undef, length(N))
+    edgecolor = [colorant"black" for i in 1:ne(model.space.graph)]
     nodesizevec = Vector(undef, length(N))
     for i in N
         a = get_node_agents(i, model)
@@ -29,10 +30,7 @@ function draw_map(model,lat,long)
         b = mean(b)
         #catch empty nodes, scale others up to 256 colors and set the cgrad
         isnan(b) && (b = 1)
-        b = scale(0,158,0,256,b)
-        #finding out that the input has to be an int or else it will turn mad took only like, 4 hours?
-        b = round(b)
-        b = Int16(b)
+        b = Int16(round(scale(0,158,0,256,b)))
         b == 0 && (b = 1)
         b > 256 && (b = 256)
         ncolor[i]=cgrad(:inferno)[b]
@@ -42,7 +40,7 @@ function draw_map(model,lat,long)
         length(a)==0 ? nodesizevec[i] = 0.5 : nodesizevec[i] = c
         #b > 20 && println("for node $i color is $(ncolor[i]) while cgrad is $(cgrad(:inferno)[b]) with mean b $b and infected $(c)")
     end
-    p = gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec)
+    p = gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec, edgestrokec=edgecolor)
     return p
 end
 
@@ -104,7 +102,7 @@ function create_gif(steps)
     plot_vector = agent_week!(model, social_groups, distant_groups,steps,true)
     #and create an interactive chart that allows you to check the different stages.
     @manipulate throttle = 0.5 for i in 1:length(plot_vector)
-            compose(plot_vector[i],(context(),Compose.text(0, -1, "Day $i", hcenter, vcenter)),(context(), rectangle(), fill("turquoise")))
+            compose(plot_vector[i],(context(),Compose.text(0, -1, "Day $i", hcenter, vcenter)),(context(), rectangle(), fill("white")))
     end
 end
 

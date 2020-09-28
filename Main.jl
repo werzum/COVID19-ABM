@@ -40,6 +40,8 @@ parameters = Dict(
             :infected_reported=>0,
             :norms_message=>0,
             :daily_cases=>0,
+            :daily_mobility=>0,
+            :daily_contact=>0,
             :work_closes=>21,
             :work_opens=>70,
             :reinfection_probability=> 0.01,
@@ -51,7 +53,7 @@ parameters = Dict(
 model,lat,long, social_groups, distant_groups = setup(parameters)
 #
 #using JLD2
-#@save "workspacefile_sr_aachen.jl" model social_groups distant_groups lat long
+#@save "workspacefile_aachen.jl" model social_groups distant_groups lat long
 #@load "workspacefile.jl" model social_groups distant_groups lat long
 #add workers and make the packages available for all of them
 addprocs(7)

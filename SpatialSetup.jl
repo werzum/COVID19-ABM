@@ -3,12 +3,12 @@ using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes,
 function create_node_map()
     #OSM is obtained best from https://protomaps.com/extracts/b6fd95e9-cb6b-40b7-b58b-acbead2e2643 for easy node selection
     #get map data and its inbounds
-    aachen_map = get_map_data(joinpath("SourceData","aachen_even_bigger.osm"), use_cache=false, only_intersections=true)
+    aachen_map = get_map_data(joinpath("SourceData","rostock.osm"), use_cache=false, only_intersections=true)
     aachen_graph = aachen_map.g
     bounds = aachen_map.bounds
 
     #use the raw parseOSM function to obtain nodes tagged with "school"
-    aachen_schools = OpenStreetMapX.parseOSM(joinpath("SourceData","aachen_even_bigger.osm"))
+    aachen_schools = OpenStreetMapX.parseOSM(joinpath("SourceData","rostock.osm"))
     aachen_schools_nodes = [key for (key,value) in aachen_schools.features if value[2]=="school"]
     aachen_schools = Dict([key => value for (key,value) in aachen_schools.nodes if in(key,aachen_schools_nodes)])
 
@@ -93,7 +93,12 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     shuffle!(agent_properties)
     [agent.age = rand(1:17) for agent in agent_properties[1:below18]]
     #check if there are enough agents before setting the share to old age
-    [agent.age = rand(66:110) for agent in agent_properties[below18+1:(below18+1+over65)]]
+    if (below18+1+over65)<=length(agent_properties)
+        print("below18 is $below18 over65 is $over65")
+        [agent.age = rand(66:110) for agent in agent_properties[below18+1:(below18+1+over65)]]
+    else
+        [agent.age = rand(66:110) for agent in agent_properties[below18:(below18+over65)]]
+    end
     shuffle!(agent_properties)
 
     #shuffle the agent_properties, sample #inhabitants, map it to the desired range and assign those to the agent properties
@@ -130,13 +135,22 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     #for all newly added nodes, set the household of #sample[i] agents to it.
     #we thereby generate sampled households
     agent_index = 0
-    for (index,value) in enumerate(noderange)
-        hhhere = sample[index]
+    #fill the social groups up
+    #sanity check if groups are too small, then make only one group
+    if length(sample) == 1
+        hhhere = sample[1]
+        value = rand(nodes)
         for i in 1:hhhere
-            #set #hhere agents to this node and increment the agent_index counter
             agent_properties[agent_index+i].household = value
         end
-        agent_index = agent_index+hhhere
+    else
+        for (index,value) in enumerate(nodes)
+            hhhere = sample[index]
+            for i in 1:hhhere
+                agent_properties[agent_index+i].household = value
+            end
+            agent_index = agent_index+hhhere
+        end
     end
 
     #adding friendgroup, same behavior, select random nodes
@@ -387,7 +401,9 @@ function add_nodes_to_model(model,nodes)
 end
 
 function get_amount(inhabitants,input)
-    return Int(round((inhabitants*(mean(input)/100))))
+    result = Int(round((inhabitants*(mean(input)/100))))
+    result < 0 && (result = 0)
+    return result
 end
 
 isbetween(a, x, b) = a <= x <= b || b <= x <= a

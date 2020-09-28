@@ -8,7 +8,9 @@
     cases_germany = csv_germany.infections[46:200]
     cases_germany = cases_germany ./ 20
     cases_model = b.infected_adjusted
-    Plots.plot!(b.infected_adjusted,label="infected")
+    Plots.plot(b.infected_adjusted,label="infected")
+    Plots.plot!(b.daily_mobility,label="inf mobility")
+    Plots.plot!(b.daily_contact,label="inf contact")
     result = rmse(cases_germany,cases_model)
 end
 
@@ -124,18 +126,45 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     fear = Array{Int32}(undef,steps*7)
     infected = Array{Int32}(undef,steps*7)
     infected_bars = Array{Int32}(undef,steps*7)
+    infected_no_adj = Array{Int32}(undef,steps*7)
+    known_infected = Array{Int32}(undef,steps*7)
+    mobility_cases = Array{Int32}(undef,steps*7)
+    contact_cases = Array{Int32}(undef,steps*7)
 
     for elm in all_data
         behavior = hcat(behavior,elm.mean_behavior)
         infected = hcat(infected, elm.infected_adjusted)
         infected_bars = hcat(infected_bars, elm.daily_cases)
+        infected_no_adj = hcat(infected_no_adj, elm.infected)
+
+        known_infected = hcat(known_infected, elm.known_infected)
+        mobility_cases = hcat(mobility_cases, elm.daily_mobility)
+        contact_cases = hcat(contact_cases, elm.daily_contact)
+
         fear = hcat(fear,elm.mean_fear)
     end
+
+    inf_no_adj = mean(infected_no_adj, dims=2)
+    known_inf = mean(known_infected, dims=2)
+    println("no adj $inf_no_adj")
+    println("known_infected $known_infected")
+
+    Plots.plot(inf_no_adj,label="infected_no_adj")
+    Plots.plot!(mean(infected,dims=2),label="infected")
+    display(Plots.plot!(known_inf, label="known_infected"))
+
+    mobility_cases = mean(mobility_cases, dims=2)
+    contact_cases = mean(contact_cases, dims=2)
+    Plots.plot(mobility_cases, label="mobility_cases")
+    display(Plots.plot!(contact_cases,label="contact_cases"))
+
+    println("known infected is $(mean(known_infected, dims=2))")
     #delete first column that has garbage in it for some reason
     behavior = behavior[:,setdiff(1:end,1)]
     fear = fear[:,setdiff(1:end,1)]
     infected = infected[:,setdiff(1:end,1)]
     infected_bars = infected_bars[:,setdiff(1:end,1)]
+    infected_no_adj = infected_no_adj[:,setdiff(1:end,1)]
 
     behavior_low = Array{Float64}(undef,steps*7)
     behavior_mean = Array{Float64}(undef,steps*7)
@@ -221,14 +250,14 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     # Plots.plot(csv_raw.Value.*100,label="behavior_real")
     # plot!(infected_real,label="infected_real")
     # plot!(infected,label="infected_model")
-    Plots.plot(fear_mean,label="fear_model", ribbon = (fear_mean.-fear_low,fear_high.-fear_low),legend=:topleft)
+    Plots.plot(fear_mean,label="fear_model", ribbon = (fear_mean.-fear_low,fear_high.-fear_low), legend=:topleft, xlabel="Days", ylabel="Attribute Strength", seriescolor=:viridis)
     plot!(fear_real,label="fear_real")
     #Plots.bar!(infected_bars_mean, label="daily_cases", fillcolor = :lightblue)
     plot!(behavior_real,label="behavior_real")
     display(plot!(behavior_mean,label="behavior_model", ribbon = (behavior_mean.-behavior_low,behavior_high.-behavior_mean)))
 
-    Plots.plot(infected_mean,label="infected_model", ribbon = (infected_mean.-infected_low,infected_mean.-infected_low),legend=:topleft)
-    Plots.bar!(infected_bars_mean, label="daily_cases", fillcolor = :lightblue)
+    Plots.plot(infected_mean,label="infected_model", ribbon = (infected_mean.-infected_low,infected_mean.-infected_low),legend=:topleft,xlabel="Days", ylabel="Total Infections")
+    #Plots.bar!(infected_bars_mean, label="daily_cases", fillcolor = :lightblue)
     display(plot!(infected_real,label="infected_real"))
 
     error = mape(behavior_real,behavior_mean)
@@ -264,11 +293,29 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     println("total infected is $(infected_mean[50]) percent is $(infected_mean[50]/nagents(model))")
     println("total infected is $(infected_mean[75]) percent is $(infected_mean[75]/nagents(model))")
     println("total infected is $(infected_mean[100]) percent is $(infected_mean[100]/nagents(model))")
-    return (fear_mean,behavior_mean,infected_mean)
+
+    #MAPEs 70s
+    # error = mape(fear_real[1:70],fear_mean[1:70])
+    # println("error fear 1-70is $error")
+    # error = mape(behavior_real[1:70],behavior_mean[1:70])
+    # println("error behavior is $error")
+    # error = mape(infected_real[1:70],infected_mean[1:70])
+    # println("error infected is $error")
+    # #compute RMSE
+    # println("RMSE Fear is $(Distances.nrmsd(fear_mean[1:70],fear_real[1:70]))")
+    # println("RMSE Behavior is $(Distances.nrmsd(behavior_mean[1:70],behavior_real[1:70]))")
+    # println("RMSE Infected is $(Distances.nrmsd(infected_mean[1:70],infected_real[1:70]))")
+    # #compute MAE%
+    # println("MAE% Fear is $(Distances.meanad(fear_mean[1:70],fear_real[1:70])/mean(fear_real[1:70]))")
+    # println("MAE% Behavior is $(Distances.meanad(behavior_mean[1:70],behavior_real[1:70])/mean(behavior_real[1:70]))")
+    # println("MAE% Infected is $(Distances.meanad(infected_mean[1:70],infected_real[1:70])/mean(infected_real[1:70]))")
+    return (fear_return,behavior_return,infected_return)
 end
 
-#result =
-print(run_multiple_both(model,social_groups,distant_groups,16,8,true))
+#1. normal, 2. old fear model, 3.no messages
+print(run_multiple_both(model,social_groups,distant_groups,12,6,true))
+# print("Last run was no messages, only individual fear")
+
 
 # 8ZjyCRiBWFYkneahHwxCv3wb2a1ORpYL
 # 4wcYUJFw0k0XLShlDzztnTBHiqxU3b3e
@@ -277,3 +324,4 @@ print(run_multiple_both(model,social_groups,distant_groups,16,8,true))
 # 18 kfBf3eYk5BPBRzwjqutbbfE887SVc5Yd - w0Yfolrc5bwjS4qw5mq1nnQi6mF03bii
 # 19 IueksS7Ubh8G3DCwVzrTd8rAVOwq3M5x
 # 20 GbKksEFF4yrVs6il55v6gwY5aVje5f0j
+# 21 gE269g2h3mw3pwgrj0Ha9Uoqen1c9DGr

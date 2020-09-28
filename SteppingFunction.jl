@@ -1,5 +1,5 @@
 @everywhere function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
-    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],behavior=Float32[],fear_over=Float32[],daily_cases=Int32[],days_passed=Int32[],infected_adjusted=Int64[])
+    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],behavior=Float32[],fear_over=Float32[],known_infected=Float32[],daily_cases=Int32[],daily_mobility=Int32[],daily_contact=Int32[],days_passed=Int32[],infected_adjusted=Int64[])
     infected_timeline = Vector{Int32}(undef,0)
     infected_timeline_growth = Vector{Int32}(undef,0)
     #initialize the timline
@@ -210,6 +210,7 @@ end
                 if rand(Binomial(possible_edges,(risk/1000)*0.003)) >= 1
                     agent.health_status = :E
                     model.properties[:daily_cases]+=1
+                    model.properties[:daily_mobility]+=1
                 end
             end
             return true
@@ -264,30 +265,6 @@ end
             move = move_infect!(agent)
             move == true && move_agent!(agent,agent.household,model)
         end
-
-        #agent behavior is computed as (norm + attitude)/2 + decay(threat)
-        old_behavior = agent.behavior
-        #reduced influence of fear so that messages can take over when due
-        new_behavior = Int16(round(mean([mean_behavior,attitude])*(agent.fear/100)))
-
-        #catch the Initialization of behavior
-        old_behavior == 0 && (old_behavior = new_behavior)
-        #check boundaries
-        #(new_behavior < 0 || new_behavAior > 200) && (new_behavior=60)
-        #prevent new behavior from jumping around too fast, a one-day stall in infection could reduce behavior too strong
-
-        if new_behavior>old_behavior*1.4
-            #round up to prevent behavior getting stuck at 1 for initially small increments
-            new_behavior = Int16(ceil(old_behavior*1.4))
-        elseif new_behavior < old_behavior*0.9
-            new_behavior = Int16(ceil(old_behavior*0.9))
-        end
-        agent.behavior = new_behavior
-        #
-        # if(in(agent.id,[10,200,350,400,500,600]))
-        #     println("the new fear is $(new_fear), old fear is $(old_fear) a daily cases of $daily_cases")
-        #     println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior ols behavior $old_behavior")
-        # end
     end
 
     function infect_step!(agent, model)
@@ -347,7 +324,7 @@ end
         else
             daily_cases = infected_timeline[end]
         end
-        daily_cases = daily_cases/(nagents(model)/45)
+        daily_cases = daily_cases/(nagents(model)/140)
         acquaintances_infected_now = acquaintances_infected/15
         new_fear = fear_growth(daily_cases,daily_cases)#acquaintances_infected_now)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
@@ -469,6 +446,7 @@ end
             target = model[rand(node_contents)]
             if target.health_status == :S
                 model.properties[:daily_cases]+=1
+                model.properties[:daily_contact]+=1
                 target.health_status = :E
                 infect_people -= 1
             end
@@ -524,9 +502,10 @@ end
     #get percentage of agents with behavior and fear > 100
     behavior(x) = count(i>=100 for i in x)/nagents(model)*100
     fear_over(x) = count(i>=100 for i in x)/nagents(model)*100
+    known_infected(x) = count(in(i,(:Q,:NQ,:HS)) for i in x)
 
-    data_to_collect = [(:health_status,infected),(:health_status,recovered),(:health_status,susceptible),(:behavior,mean_sentiment),(:fear,mean_sentiment),(:behavior,behavior),(:fear,fear_over)]
-    model_data_to_collect = [(:daily_cases),(:days_passed)]
+    data_to_collect = [(:health_status,infected),(:health_status,recovered),(:health_status,susceptible),(:behavior,mean_sentiment),(:fear,mean_sentiment),(:behavior,behavior),(:fear,fear_over),(:health_status,known_infected)]
+    model_data_to_collect = [(:daily_cases),(:daily_mobility),(:daily_contact),(:days_passed)]
 
     #preallocate some arrays
     aquaintances_vector = Vector{Int64}(undef, length(all_agents))
@@ -555,7 +534,7 @@ end
     deleterows!(data,1)
     #add the daily cases since this is an accurate count of the new infections today
     data = hcat(data,DataFrame(infected_adjusted=last(infected_timeline)))
-    DataFrames.rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:behavior,:fear_over,:daily_cases,:days_passed,:infected_adjusted])
+    DataFrames.rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:behavior,:fear_over,:known_infected,:daily_cases,:daily_mobility,:daily_contact,:days_passed,:infected_adjusted])
     return data
 end
 
