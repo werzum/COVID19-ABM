@@ -1,6 +1,10 @@
 using Distributed
 using Agents, Random, DataFrames, LightGraphs, CSV, Plots, HypothesisTests, Distances
+<<<<<<< HEAD
 using Gadfly, Interact, Compose, Printf, Reactive, ColorSchemes
+=======
+using Gadfly, Interact, Compose, Printf, Reactive
+>>>>>>> 26e9fe6e13ed7d402e0e5a4ad8b5373ad4f61bb9
 
 include("SpatialSetup.jl") #exports setup
 include("Visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long), create_chart(steps), create_gif(steps)
@@ -50,8 +54,13 @@ parameters = Dict(
 #initialize the model and generate the map - takes about 115s for 13.000 agents
 model,lat,long, social_groups, distant_groups = setup(parameters)
 #
+<<<<<<< HEAD
 using JLD2
 @save "workspacefile_lk_rostock.jl" model social_groups distant_groups lat long
+=======
+#using JLD2
+#@save "workspacefile_sr_aachen.jl" model social_groups distant_groups lat long
+>>>>>>> 26e9fe6e13ed7d402e0e5a4ad8b5373ad4f61bb9
 #@load "workspacefile.jl" model social_groups distant_groups lat long
 #add workers and make the packages available for all of them
 addprocs(7)
