@@ -324,16 +324,15 @@ end
         else
             daily_cases = infected_timeline[end]
         end
-        daily_cases = daily_cases/(nagents(model)/140)
+        daily_cases = daily_cases/(nagents(model)/45)
         acquaintances_infected_now = acquaintances_infected/15
-        new_fear = fear_growth(daily_cases,daily_cases)#acquaintances_infected_now)
+        new_fear = fear_growth(daily_cases,acquaintances_infected_now)#acquaintances_infected_now)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
         #and apply the exponential decay to it after two weeks and we didnt have growth for three days
 
         if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 104,trues(3))
             new_fear = Int16(round(fear_decay(new_fear, time)))
         end
-
 
         old_fear == 0 && (old_fear = new_fear)
         if new_fear>old_fear*1.4

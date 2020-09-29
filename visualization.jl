@@ -30,14 +30,15 @@ function draw_map(model,lat,long)
         b = mean(b)
         #catch empty nodes, scale others up to 256 colors and set the cgrad
         isnan(b) && (b = 1)
-        b = Int16(round(scale(0,158,0,256,b)))
+        b>100 && (b=100)
+        b = Int16(round(scale(0,100,0,256,b)))
         b == 0 && (b = 1)
         b > 256 && (b = 256)
         ncolor[i]=cgrad(:inferno)[b]
         #get infected agents#
         c = count(agent -> in(agent.health_status,(:E,:IwS,:Q,:NQ,:HS)),a)
         #set nodesize according to number of infected agents
-        length(a)==0 ? nodesizevec[i] = 0.5 : nodesizevec[i] = c
+        length(a)==0 ? nodesizevec[i] = 0.5 : nodesizevec[i] = c*2
         #b > 20 && println("for node $i color is $(ncolor[i]) while cgrad is $(cgrad(:inferno)[b]) with mean b $b and infected $(c)")
     end
     p = gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec, edgestrokec=edgecolor)
@@ -75,15 +76,15 @@ function draw_route(model,lat,long)
         thisroute = agent.workplaceroute
     end
     #make array of normal edge colors
-    edgecolors = [colorant"lightgray" for i in  1:ne(model.space.graph)]
+    edgecolors = [colorant"black" for i in  1:ne(model.space.graph)]
     #and add all routes to edgecolors
     edgecolors = generate_edgecolors(workplaceroute, edgecolors)
     edgecolors = generate_edgecolors(socialroute, edgecolors)
     edgecolors = generate_edgecolors(distantroute, edgecolors)
     #set the home as yellow point in the map
-    nodecolors = [colorant"turquoise" for i in  1:ne(model.space.graph)]
-    nodecolors[agent.household] = colorant"yellow"
-    gplot(model.space.graph, long, lat, edgestrokec=edgecolors, nodefillc=nodecolors)
+    nodecolors = [colorant"black" for i in  1:ne(model.space.graph)]
+    nodecolors[agent.household] = colorant"red"
+    return gplot(model.space.graph, long, lat, edgestrokec=edgecolors, nodefillc=nodecolors)
 end
 
 function create_chart(steps)
@@ -97,7 +98,9 @@ function create_chart(steps)
     plot!(p,b.daily_cases,label="daily cases")
 end
 
-function create_gif(steps)
+function create_gif(steps,agents,model)
+    reset_infected(model)
+    add_infected(agents,model)
     #call agent week with paint_mode on
     plot_vector = agent_week!(model, social_groups, distant_groups,steps,true)
     #and create an interactive chart that allows you to check the different stages.
@@ -108,8 +111,9 @@ end
 
 export draw_map,draw_route,create_chart, create_gif
 
-#=savefig examples
-savefig(a,"Graphics\\example_route.png")
-using Compose
-draw(PNG("Graphics\\example_route.png",16cm,16cm),a)
-=#
+# savefig examples
+# savefig("Graphics\\example_route.png")
+# using Compose
+# using Plots.PlotMeasures
+#draw(PNG("Graphics\\example_route.png",100PlotMeasures.cm,100PlotMeasures.cm),route)
+#set_default_graphic_size(40PlotMeasures.cm, 28PlotMeasures.cm)
