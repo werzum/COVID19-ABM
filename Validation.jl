@@ -1,17 +1,17 @@
 @everywhere function validate_infected(steps)
     reset_infected(model)
-    add_infected(1)
+    add_infected(1,model)
     b = agent_week!(model, social_groups, distant_groups,steps,false)
-    csv_raw = CSV.read("SourceData\\covid19_ECDC.csv")
-    csv_germany = filter(x -> x[Symbol("Country/Region")] == "Germany",csv_raw)
-    #get cases from the 14.02., the start date of the model and five more months
-    cases_germany = csv_germany.infections[46:200]
-    cases_germany = cases_germany ./ 20
-    cases_model = b.infected_adjusted
-    Plots.plot(b.infected_adjusted,label="infected")
-    Plots.plot!(b.daily_mobility,label="inf mobility")
-    Plots.plot!(b.daily_contact,label="inf contact")
-    result = rmse(cases_germany,cases_model)
+    # csv_raw = CSV.read("SourceData\\covid19_ECDC.csv")
+    # csv_germany = filter(x -> x[Symbol("Country/Region")] == "Germany",csv_raw)
+    # #get cases from the 14.02., the start date of the model and five more months
+    # cases_germany = csv_germany.infections[46:200]
+    # cases_germany = cases_germany ./ 20
+    # cases_model = b.infected_adjusted
+    # Plots.plot(b.infected_adjusted,label="infected")
+    # Plots.plot!(b.daily_mobility,label="inf mobility")
+    # Plots.plot!(b.daily_contact,label="inf contact")
+    # result = rmse(cases_germany,cases_model)
 end
 
 function validate_fear(steps)
@@ -122,6 +122,7 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     reset_model_parallel(1)
     all_data = pmap(j -> agent_week!(deepcopy(model),social_groups,distant_groups,steps,false), 1:replicates)
     println("finished computation of data")
+    #set up arrays for extraction of all data
     behavior = Array{Int32}(undef,steps*7)
     fear = Array{Int32}(undef,steps*7)
     infected = Array{Int32}(undef,steps*7)
@@ -130,35 +131,45 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     known_infected = Array{Int32}(undef,steps*7)
     mobility_cases = Array{Int32}(undef,steps*7)
     contact_cases = Array{Int32}(undef,steps*7)
+    IwS = Array{Int32}(undef,steps*7)
 
+    #extract data from each dataset
     for elm in all_data
         behavior = hcat(behavior,elm.mean_behavior)
         infected = hcat(infected, elm.infected_adjusted)
         infected_bars = hcat(infected_bars, elm.daily_cases)
         infected_no_adj = hcat(infected_no_adj, elm.infected)
-
         known_infected = hcat(known_infected, elm.known_infected)
         mobility_cases = hcat(mobility_cases, elm.daily_mobility)
         contact_cases = hcat(contact_cases, elm.daily_contact)
-
+        IwS = hcat(IwS, elm.IwS)
         fear = hcat(fear,elm.mean_fear)
     end
 
-    inf_no_adj = mean(infected_no_adj, dims=2)
+    #remove first bogus column and average
+    known_infected = known_infected[1:end, 2:end]
     known_inf = mean(known_infected, dims=2)
-    println("no adj $inf_no_adj")
-    println("known_infected $known_infected")
+    IwS = IwS[1:end, 2:end]
+    IwS = mean(IwS, dims=2)
+    infected = infected[1:end, 2:end]
+    inf = mean(infected,dims=2)
+    println("known_infected $known_inf")
+    println("infected $(inf)")
+    println("last percentage $(known_inf[end]/inf[end])")
 
-    Plots.plot(inf_no_adj,label="infected_no_adj")
-    Plots.plot!(mean(infected,dims=2),label="infected")
-    display(Plots.plot!(known_inf, label="known_infected"))
+    Plots.plot(inf,label="infected")
 
+    display(Plots.plot!(IwS, label="known_infected"))
+
+    #same with mobility contact cases
+    mobility_cases = mobility_cases[1:end, 2:end]
+    contact_cases = contact_cases[1:end, 2:end]
     mobility_cases = mean(mobility_cases, dims=2)
     contact_cases = mean(contact_cases, dims=2)
+    println("mobility $(mobility_cases[end]), contact $(contact_cases[end]))")
     Plots.plot(mobility_cases, label="mobility_cases")
     display(Plots.plot!(contact_cases,label="contact_cases"))
 
-    println("known infected is $(mean(known_infected, dims=2))")
     #delete first column that has garbage in it for some reason
     behavior = behavior[:,setdiff(1:end,1)]
     fear = fear[:,setdiff(1:end,1)]
@@ -260,16 +271,6 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     #Plots.bar!(infected_bars_mean, label="daily_cases", fillcolor = :lightblue)
     display(plot!(infected_real,label="infected_real"))
 
-    error = mape(behavior_real,behavior_mean)
-    println("error behavior is $error")
-    #println("behavior data is $behavior")
-    error = mape(fear_real,fear_mean)
-    println("error fear is $error")
-    #println("fear data is $fear")
-    error = mape(infected_real,infected_mean)
-    println("error infected is $error")
-    #println("infected data is $infected")
-
     #MAPEs
     error = mape(fear_real,fear_mean)
     println("error fear is $error")
@@ -293,28 +294,10 @@ function run_multiple_both(model,social_groups,distant_groups,steps,replicates,e
     println("total infected is $(infected_mean[50]) percent is $(infected_mean[50]/nagents(model))")
     println("total infected is $(infected_mean[75]) percent is $(infected_mean[75]/nagents(model))")
     println("total infected is $(infected_mean[100]) percent is $(infected_mean[100]/nagents(model))")
-
-    #MAPEs 70s
-    # error = mape(fear_real[1:70],fear_mean[1:70])
-    # println("error fear 1-70is $error")
-    # error = mape(behavior_real[1:70],behavior_mean[1:70])
-    # println("error behavior is $error")
-    # error = mape(infected_real[1:70],infected_mean[1:70])
-    # println("error infected is $error")
-    # #compute RMSE
-    # println("RMSE Fear is $(Distances.nrmsd(fear_mean[1:70],fear_real[1:70]))")
-    # println("RMSE Behavior is $(Distances.nrmsd(behavior_mean[1:70],behavior_real[1:70]))")
-    # println("RMSE Infected is $(Distances.nrmsd(infected_mean[1:70],infected_real[1:70]))")
-    # #compute MAE%
-    # println("MAE% Fear is $(Distances.meanad(fear_mean[1:70],fear_real[1:70])/mean(fear_real[1:70]))")
-    # println("MAE% Behavior is $(Distances.meanad(behavior_mean[1:70],behavior_real[1:70])/mean(behavior_real[1:70]))")
-    # println("MAE% Infected is $(Distances.meanad(infected_mean[1:70],infected_real[1:70])/mean(infected_real[1:70]))")
     return (fear_return,behavior_return,infected_return)
 end
 
-#1. normal, 2. old fear model, 3.no messages
-print(run_multiple_both(model,social_groups,distant_groups,12,6,true))
-# print("Last run was no messages, only individual fear")
+#print(run_multiple_both(model,social_groups,distant_groups,16,7,true))
 
 
 # 8ZjyCRiBWFYkneahHwxCv3wb2a1ORpYL

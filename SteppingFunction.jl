@@ -1,7 +1,10 @@
 @everywhere function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
-    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],behavior=Float32[],fear_over=Float32[],known_infected=Float32[],daily_cases=Int32[],daily_mobility=Int32[],daily_contact=Int32[],days_passed=Int32[],infected_adjusted=Int64[])
+    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],behavior=Float32[],fear_over=Float32[],known_infected=Float32[],daily_cases=Int32[],daily_mobility=Int32[],daily_contact=Int32[],days_passed=Int32[],infected_adjusted=Int64[],IwS=Int64[])
     infected_timeline = Vector{Int32}(undef,0)
     infected_timeline_growth = Vector{Int32}(undef,0)
+    iws_timeline = Vector{Int32}(undef,0)
+    infection_age = Vector{Int32}(undef,0)
+    death_age = Vector{Int32}(undef,0)
     #initialize the timline
     push!(infected_timeline,0)
     push!(infected_timeline_growth,100)
@@ -27,8 +30,15 @@
             #to avoid costly recomputation in behavior, we collect all agents once and then use it in behavior
             all_agents = collect(allagents(model))
 
+            #fill the iws timeline with value from last day so it can add up
+            push!(iws_timeline,0)
+            if model.properties[:days_passed] > 1
+                iws_timeline[model.properties[:days_passed]]=iws_timeline[model.properties[:days_passed]-1]
+            else
+                iws_timeline[model.properties[:days_passed]] = 0
+            end
             #run the model
-            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
+            day_data = agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth,iws_timeline,infection_age,death_age)
             #update the count of infected now and reported
             infected_count = last(infected_timeline)+model.properties[:daily_cases]
             push!(infected_timeline,infected_count)
@@ -60,6 +70,9 @@
         model.properties[:norms_message] = false
     end
     #return the data of the model if creating a chart and return plot vector if making a GIF
+    #println("infection age is $infection_age")
+    #println("death age is $death_age")
+    #println("nr infected is $(infected_timeline[end])")
     if paint_mode return plot_vector else return agent_data end
 end
 
@@ -164,7 +177,7 @@ end
     return y
 end
 
-@everywhere function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth)
+@everywhere function agent_day!(model, social_active_group, distant_active_group,infected_edges,all_agents,infected_timeline,infected_timeline_growth,iws_timeline,infection_age,death_age)
 
     #put functions within parent scope so we can read from this scope
     function move_infect!(agent)
@@ -211,6 +224,7 @@ end
                     agent.health_status = :E
                     model.properties[:daily_cases]+=1
                     model.properties[:daily_mobility]+=1
+                    push!(infection_age,agent.age)
                 end
             end
             return true
@@ -268,6 +282,7 @@ end
     end
 
     function infect_step!(agent, model)
+        agent.health_status == :D && return
         behavior!(agent,model)
         transmit!(agent,model)
         update!(agent,model)
@@ -448,6 +463,7 @@ end
                 model.properties[:daily_contact]+=1
                 target.health_status = :E
                 infect_people -= 1
+                push!(infection_age,agent.age)
             end
             t +=1
         end
@@ -464,6 +480,7 @@ end
                 agent.health_status = :NQ
             else
                 agent.health_status = :IwS
+                iws_timeline[model.properties[:days_passed]]+=1
             end
         elseif agent.health_status == :NQ && agent.days_infected == model.properties[:exposed_period]+1
             #decide if going into quarantine, influenced by behavior - since its mandatory by government, only small percentage doesnt go into quarantine
@@ -474,7 +491,8 @@ end
         elseif (agent.health_status == :NQ || agent.health_status ==:Q) && agent.days_infected == model.properties[:exposed_period]+4
             #see if agent gets severe symptoms or stays only mildly infected, happens ~4 days after symptoms show up
             #base rate is 12% in hospital, influenced by agent age, source RKI Situationsbericht 30.03
-            if rand()*agent.age/50<0.12
+            #this distribution has on average (tested with age 10,40 and 70) the 12% base rate, fewer for children and more for the elderly
+            if rand(Normal(1,1))*(rand(-35:1:35)+agent.age)/100 > 1.17
                 agent.health_status = :HS
             end
         elseif in(agent.health_status,(:NQ,:Q, :IwS)) && agent.days_infected == 14 #RKI Krankheitsverlauf zwei Wochen
@@ -484,7 +502,8 @@ end
             #see if agent with heavy symptoms dies or recovers. Happens after three weeks as ? specifies
             #no age here, since we already used this for severe cases. Source RKI Steckbrief
                 if rand()<0.22
-                    kill_agent!(agent, model)
+                    agent.health_status = :D
+                    push!(death_age,agent.age)
                 else
                     agent.health_status = :M
                 end
@@ -493,7 +512,7 @@ end
         end
     end
 
-    #data collection functions
+    #data collection :
     infected(x) = count(in(i,(:E,:IwS,:Q,:NQ,:HS)) for i in x)
     recovered(x) = count(in(i,(:M,:D)) for i in x)
     susceptible(x) = count(i == :S for i in x)
@@ -531,9 +550,9 @@ end
     data_m = select(data_m,Not(:step))
     data = hcat(data_a,data_m)
     deleterows!(data,1)
-    #add the daily cases since this is an accurate count of the new infections today
-    data = hcat(data,DataFrame(infected_adjusted=last(infected_timeline)))
-    DataFrames.rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:behavior,:fear_over,:known_infected,:daily_cases,:daily_mobility,:daily_contact,:days_passed,:infected_adjusted])
+    #add the daily cases and IwS since this is an accurate count of the new infections today
+    data = hcat(data,DataFrame(infected_adjusted=last(infected_timeline)),DataFrame(iws_timeline=last(iws_timeline)))
+    DataFrames.rename!(data,[:step, :infected, :recovered, :susceptible,:mean_behavior,:mean_fear,:behavior,:fear_over,:known_infected,:daily_cases,:daily_mobility,:daily_contact,:days_passed,:infected_adjusted,:IwS])
     return data
 end
 
