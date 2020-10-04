@@ -50,7 +50,7 @@ parameters = Dict(
             :days_passed => 0)
 
 #initialize the model and generate the map - takes about 115s for 13.000 agents
-model,lat,long, social_groups, distant_groups = setup(parameters)
+model,lat,long,social_groups, distant_groups = setup(parameters)
 #
 #using JLD2
 #@save "workspacefile_aachen.jl" model social_groups distant_groups lat long

@@ -66,9 +66,33 @@ function get_validation_data()
     return fear_real, behavior_real, infections_real
 end
 
+function plot_model_demographics(infected,known_infected,mobility_cases,contact_cases)
+    remove first bogus column and average
+    known_infected = known_infected[1:end, 2:end]
+    known_inf = mean(known_infected, dims=2)
+    IwS = IwS[1:end, 2:end]
+    IwS = mean(IwS, dims=2)
+    infected = infected[1:end, 2:end]
+    inf = mean(infected,dims=2)
+    println("known_infected $known_inf")
+    println("infected $(inf)")
+    println("last percentage $(known_inf[end]/inf[end])")
+    Plots.plot(inf,label="infected")
+    display(Plots.plot!(IwS, label="known_infected"))
+
+    same with mobility contact cases
+    mobility_cases = mobility_cases[1:end, 2:end]
+    contact_cases = contact_cases[1:end, 2:end]
+    mobility_cases = mean(mobility_cases, dims=2)
+    contact_cases = mean(contact_cases, dims=2)
+    println("mobility $(mobility_cases[end]), contact $(contact_cases[end]))")
+    Plots.plot(mobility_cases, label="mobility_cases")
+    display(Plots.plot!(contact_cases,label="contact_cases"))
+return
+
 #a nice function that scales input
 @everywhere function scale(min_m,max_m,min_t,max_t,m)
     return (m-min_m)/(max_m-min_m)*(max_t-min_t)+min_t
 end
 
-export add_infected,reset_infected,restart_model, scale, reset_model_parallel, get_validation_data
+export add_infected,reset_infected,restart_model, scale, reset_model_parallel, get_validation_data, plot_model_demographics

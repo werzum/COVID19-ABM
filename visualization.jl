@@ -112,8 +112,9 @@ end
 export draw_map,draw_route,create_chart, create_gif
 
 # savefig examples
-# savefig("Graphics\\example_route.png")
-# using Compose
-# using Plots.PlotMeasures
+#savefig("Graphics\\rostock_example.png")
+#using Compose
+#using Plots.PlotMeasures
+#route = draw_initial_map(model,lat,long)
 #draw(PNG("Graphics\\example_route.png",100PlotMeasures.cm,100PlotMeasures.cm),route)
 #set_default_graphic_size(40PlotMeasures.cm, 28PlotMeasures.cm)

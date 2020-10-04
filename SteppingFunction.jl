@@ -15,7 +15,7 @@
     for step in 1:steps
         for i in 1:7
             model.days_passed+=1
-            send_messages(model.days_passed,attitude,norms)
+            #send_messages(model.days_passed,attitude,norms)
             #select social&distant active groups randomly, more agents are social active on the weekend
             if i < 6
                 social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
@@ -224,7 +224,7 @@ end
                     agent.health_status = :E
                     model.properties[:daily_cases]+=1
                     model.properties[:daily_mobility]+=1
-                    push!(infection_age,agent.age)
+                    push!(infection_age,agent.wealth)
                 end
             end
             return true
@@ -341,7 +341,7 @@ end
         end
         daily_cases = daily_cases/(nagents(model)/45)
         acquaintances_infected_now = acquaintances_infected/15
-        new_fear = fear_growth(daily_cases,acquaintances_infected_now)#acquaintances_infected_now)
+        new_fear = fear_growth(acquaintances_infected_now,acquaintances_infected_now)#acquaintances_infected_now)
         time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
         #and apply the exponential decay to it after two weeks and we didnt have growth for three days
 
@@ -463,7 +463,7 @@ end
                 model.properties[:daily_contact]+=1
                 target.health_status = :E
                 infect_people -= 1
-                push!(infection_age,agent.age)
+                push!(infection_age,agent.wealth)
             end
             t +=1
         end

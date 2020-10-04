@@ -3,12 +3,12 @@ using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes,
 function create_node_map()
     #OSM is obtained best from https://protomaps.com/extracts/b6fd95e9-cb6b-40b7-b58b-acbead2e2643 for easy node selection
     #get map data and its inbounds
-    aachen_map = get_map_data(joinpath("SourceData","aachen_test3.osm"), use_cache=false, only_intersections=true)
+    aachen_map = get_map_data(joinpath("SourceData","rostock.osm"), use_cache=false, only_intersections=true)
     aachen_graph = aachen_map.g
     bounds = aachen_map.bounds
 
     #use the raw parseOSM function to obtain nodes tagged with "school"
-    aachen_schools = OpenStreetMapX.parseOSM(joinpath("SourceData","aachen_test3.osm"))
+    aachen_schools = OpenStreetMapX.parseOSM(joinpath("SourceData","rostock.osm"))
     aachen_schools_nodes = [key for (key,value) in aachen_schools.features if value[2]=="school"]
     aachen_schools = Dict([key => value for (key,value) in aachen_schools.nodes if in(key,aachen_schools_nodes)])
 
@@ -93,7 +93,11 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     shuffle!(agent_properties)
     [agent.age = rand(1:17) for agent in agent_properties[1:below18]]
     #check if there are enough agents before setting the share to old age
-    [agent.age = rand(66:110) for agent in agent_properties[below18+1:(below18+1+over65)]]
+    if (below18+1+over65)<=length(agent_properties)
+        [agent.age = rand(66:110) for agent in agent_properties[below18+1:(below18+1+over65)]]
+    else
+        [agent.age = rand(66:110) for agent in agent_properties[below18:(below18+over65)]]
+    end
     shuffle!(agent_properties)
 
     #shuffle the agent_properties, sample #inhabitants, map it to the desired range and assign those to the agent properties
@@ -132,7 +136,7 @@ function fill_map(model,group,long, lat, correction_factor,schools,schoolrange, 
     agent_index = 0
     #fill the social groups up
     #sanity check if groups are too small, then make only one group
-    for (index,value) in enumerate(noderange)	
+    for (index,value) in enumerate(noderange)
           hhhere = sample[index]
           for i in 1:hhhere
               #set #hhere agents to this node and increment the agent_index counter
@@ -429,7 +433,7 @@ function setup(params)
 
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
-    correction_factor = nv(nodes)
+    correction_factor = nv(nodes)/2
 
     #set up the variables, structs etc.
     space = GraphSpace(nodes)
