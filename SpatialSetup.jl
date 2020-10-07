@@ -3,12 +3,12 @@ using StatsBase, Distributions, Statistics,Distributed, GraphPlot, GraphRecipes,
 function create_node_map()
     #OSM is obtained best from https://protomaps.com/extracts/b6fd95e9-cb6b-40b7-b58b-acbead2e2643 for easy node selection
     #get map data and its inbounds
-    aachen_map = get_map_data(joinpath("SourceData","rostock.osm"), use_cache=false, only_intersections=true)
+    aachen_map = get_map_data(joinpath("SourceData","aachen_test3.osm"), use_cache=false, only_intersections=true)
     aachen_graph = aachen_map.g
     bounds = aachen_map.bounds
 
     #use the raw parseOSM function to obtain nodes tagged with "school"
-    aachen_schools = OpenStreetMapX.parseOSM(joinpath("SourceData","rostock.osm"))
+    aachen_schools = OpenStreetMapX.parseOSM(joinpath("SourceData","aachen_test3.osm"))
     aachen_schools_nodes = [key for (key,value) in aachen_schools.features if value[2]=="school"]
     aachen_schools = Dict([key => value for (key,value) in aachen_schools.nodes if in(key,aachen_schools_nodes)])
 
@@ -433,7 +433,7 @@ function setup(params)
 
     #divide the population by this to avoid computing me to death
     #should scale nicely with graph size to keep agent number in check
-    correction_factor = nv(nodes)/2
+    correction_factor = nv(nodes)
 
     #set up the variables, structs etc.
     space = GraphSpace(nodes)

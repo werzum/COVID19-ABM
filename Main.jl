@@ -5,7 +5,7 @@ using Gadfly, Interact, Compose, Printf, Reactive, ColorSchemes
 include("SpatialSetup.jl") #exports setup
 include("Visualization.jl")# exports draw_route(model,lat,long) and draw_map(model,lat,long), create_chart(steps), create_gif(steps)
 include("UtilityFunctions.jl")# exports add_infected(number),reset_infected(model),restart_model(agents,steps) and scale(min_m,max_m,min_t,max_t,m)
-include("Validation.jl")#exports nothing so far
+include("Validation.jl")#provides validation with parallel runs and plotting 
 include("SteppingFunction.jl")#exports agent_week!
 
 #agent and params setup

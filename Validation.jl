@@ -159,10 +159,6 @@ function run_parallel(model,social_groups,distant_groups,steps,replicates)
     behavior_real = behavior_real[1:steps*7]
     infected_real = infected_real[1:steps*7]
 
-
-    # Plots.plot(csv_raw.Value.*100,label="behavior_real")
-    # plot!(infected_real,label="infected_real")
-    # plot!(infected,label="infected_model")
     Plots.plot(fear_mean,label="fear_model", ribbon = (fear_mean.-fear_low,fear_high.-fear_low), legend=:topleft, xlabel="Days", ylabel="Attribute Strength", seriescolor=:viridis)
     plot!(fear_real,label="fear_real")
     #Plots.bar!(infected_bars_mean, label="daily_cases", fillcolor = :lightblue)
@@ -173,41 +169,35 @@ function run_parallel(model,social_groups,distant_groups,steps,replicates)
     #Plots.bar!(infected_bars_mean, label="daily_cases", fillcolor = :lightblue)
     display(plot!(infected_real,label="infected_real"))
 
-    #MAPEs
+    #output test results
     error = mape(fear_real,fear_mean)
     println("error fear is $error")
+    println("RMSE Fear is $(Distances.nrmsd(fear_mean,fear_real))")
+    println("MAE% Fear is $(Distances.meanad(fear_mean,fear_real)/mean(fear_real))")
+
     error = mape(behavior_real,behavior_mean)
     println("error behavior is $error")
+    println("RMSE Behavior is $(Distances.nrmsd(behavior_mean,behavior_real))")
+    println("MAE% Behavior is $(Distances.meanad(behavior_mean,behavior_real)/mean(behavior_real))")
+
     error = mape(infected_real,infected_mean)
     println("error infected is $error")
-    #compute RMSE
-    println("RMSE Fear is $(Distances.nrmsd(fear_mean,fear_real))")
-    println("RMSE Behavior is $(Distances.nrmsd(behavior_mean,behavior_real))")
     println("RMSE Infected is $(Distances.nrmsd(infected_mean,infected_real))")
-    #compute MAE%
-    println("MAE% Fear is $(Distances.meanad(fear_mean,fear_real)/mean(fear_real))")
-    println("MAE% Behavior is $(Distances.meanad(behavior_mean,behavior_real)/mean(behavior_real))")
     println("MAE% Infected is $(Distances.meanad(infected_mean,infected_real)/mean(infected_real))")
-    #compute F-Test
-    println("F-Test Fear is $(VarianceFTest(fear_mean,fear_real))")
-    println("F-Test Behavior is $(VarianceFTest(behavior_mean,behavior_real))")
-    println("F-Test Infected is $(VarianceFTest(infected_real,infected_mean))")
+
+    #compute percentage infected
     println("total infected is $(infected_mean[25]) percent is $(infected_mean[25]/nagents(model))")
     println("total infected is $(infected_mean[50]) percent is $(infected_mean[50]/nagents(model))")
     println("total infected is $(infected_mean[75]) percent is $(infected_mean[75]/nagents(model))")
     println("total infected is $(infected_mean[100]) percent is $(infected_mean[100]/nagents(model))")
+
+    #compute F-Test
+    println("F-Test Fear is $(VarianceFTest(fear_mean,fear_real))")
+    println("F-Test Behavior is $(VarianceFTest(behavior_mean,behavior_real))")
+    println("F-Test Infected is $(VarianceFTest(infected_real,infected_mean))")
+
     return (fear_return,behavior_return,infected_return)
 end
 
-#test = run_multiple_both(model,social_groups,distant_groups,16,14,true)
-
-# 8ZjyCRiBWFYkneahHwxCv3wb2a1ORpYL
-# 4wcYUJFw0k0XLShlDzztnTBHiqxU3b3e
-# 15 BfMYroe26WYalil77FoDi9qh59eK5xNr
-# 16 cluFn7wTiGryunymYOu4RcffSxQluehd
-# 18 kfBf3eYk5BPBRzwjqutbbfE887SVc5Yd - w0Yfolrc5bwjS4qw5mq1nnQi6mF03bii
-# 19 IueksS7Ubh8G3DCwVzrTd8rAVOwq3M5x
-# 20 GbKksEFF4yrVs6il55v6gwY5aVje5f0j
-# 21 gE269g2h3mw3pwgrj0Ha9Uoqen1c9DGr
-
+test = run_parallel(model,social_groups,distant_groups,16,14)
 #savefig("employees_per_workspace")

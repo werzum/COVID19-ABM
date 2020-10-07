@@ -19,8 +19,6 @@
             #select social&distant active groups randomly, more agents are social active on the weekend
             if i < 6
                 social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
-                #distant = Shopping + Sport, shopping 2x/week (https://de.statista.com/statistik/daten/studie/214882/umfrage/einkaufsfrequenz-beim-lebensmitteleinkauf/)
-                #sports 2,5x per week https://de.statista.com/statistik/daten/studie/177007/umfrage/tage-pro-woche-an-denen-sport-getrieben-wird/
                 distant_active_group = rand(distant_groups,Int.(round.(length(distant_groups)/10)))
             else
                 social_active_group = rand(social_groups,Int.(round.(length(social_groups)/3)))
@@ -246,7 +244,7 @@ end
             if model.properties[:days_passed] > model.properties[:work_opens] && rand()> percent_sd
                 return
             end
-            #on the weekends, only ~20% go to work https://www.destatis.de/DE/Themen/Arbeit/Arbeitsmarkt/Qualitaet-Arbeit/Dimension-3/wochenendarbeitl.html
+            #on the weekends, only ~27% go to work
             if length(social_active_group)==Int(round(length(social_groups)/3)) && rand() > 0.0276
                 return
             end
@@ -290,10 +288,9 @@ end
     end
 
     function behavior!(agent, model)
-        #only calculate behavior each second day
-        #model.properties[:days_passed] % 2 == 0 && return
         #do this only once per day
         time_of_day != :work && return
+
         #get behavior of others in same nodes
         node_agents = get_node_agents(agent.pos,model)
         mean_behavior = mean([agent.behavior for agent in node_agents])
@@ -308,8 +305,7 @@ end
             mean_behavior = norm_decay(mean_behavior,time_passed)
         end
 
-        #println("mean behavior is $mean_behavior")
-        model.properties[:norms_message] == true && rand()>0.1 && (mean_behavior*=1.05)
+        #model.properties[:norms_message] == true && rand()>0.1 && (mean_behavior*=1.05)
 
         #get the agents attitude with our decay
         attitude = attitude_decay(agent.original_attitude, agent.attitude)
@@ -322,33 +318,26 @@ end
         if acquaintances_infected == 0 || model.infected_reported == 0
             acquaintances_infected = 1
         end
-        #add them as a modifier to the fear rate
-        if agent.acquaintances_growth != 0
-            #get the growth rate of infected
-            growth = acquaintances_infected/agent.acquaintances_growth
-            agent.acquaintances_growth = acquaintances_infected
-        else
-            growth = 1
-        end
 
-        #fear grows if reported cases are growing, decay kicks in when cases shrink for 3 consecutive days
-        #if length(timeline_growth >3 && last 3 entries decays) || model.properties.decay == true
-        #infected_growth = last(infected_timeline_growth)/50
+        #get daily cases from three days ago(if possible)
         if length(infected_timeline)>3
             daily_cases = infected_timeline[end-2] - infected_timeline[end-3]
         else
             daily_cases = infected_timeline[end]
         end
+
+        #use correction factors on both fear factors
         daily_cases = daily_cases/(nagents(model)/45)
         acquaintances_infected_now = acquaintances_infected/15
-        new_fear = fear_growth(acquaintances_infected_now,acquaintances_infected_now)#acquaintances_infected_now)
-        time = length(infected_timeline_growth)# - findlast(x -> x>1,infected_timeline_growth) + 1
-        #and apply the exponential decay to it after two weeks and we didnt have growth for three days
+        new_fear = fear_growth(daily_cases,acquaintances_infected_now)
+        time = length(infected_timeline_growth)
 
+        #and apply the exponential decay to it after two weeks and we didnt have growth for three days
         if model.properties[:days_passed] > 20 && isequal(infected_timeline_growth[length(infected_timeline_growth)-2:length(infected_timeline_growth)].< 104,trues(3))
             new_fear = Int16(round(fear_decay(new_fear, time)))
         end
 
+        #set bounds for fear growth&decay
         old_fear == 0 && (old_fear = new_fear)
         if new_fear>old_fear*1.4
             #round up to prevent behavior getting stuck at 1 for initially small increments
@@ -356,7 +345,7 @@ end
         elseif new_fear < old_fear*0.9
             new_fear = old_fear*0.9
         end
-        #agent.fear = new_fear
+
         #get the new fear and add it to the fear history
         push!(agent.fear_history, new_fear)
         #calculate the average fear we use for the behavior calc
@@ -369,26 +358,18 @@ end
         #agent behavior is computed as (norm + attitude)/2 + decay(threat)
         old_behavior = agent.behavior
         #reduced influence of fear so that messages can take over when due
-        new_behavior = Int16(round(mean([mean_behavior,attitude])*agent.fear/100))#*(agent.fear/100)))
-
+        new_behavior = Int16(round(mean([mean_behavior,attitude])*agent.fear/100))
         #catch the Initialization of behavior
         old_behavior == 0 && (old_behavior = new_behavior)
-        #check boundaries
-        #(new_behavior < 0 || new_behavAior > 200) && (new_behavior=60)
-        #prevent new behavior from jumping around too fast, a one-day stall in infection could reduce behavior too strong
 
+        #prevent new behavior from jumping around too fast, a one-day stall in infection could reduce behavior too strong
         if new_behavior>old_behavior*1.4
             #round up to prevent behavior getting stuck at 1 for initially small increments
             new_behavior = Int16(ceil(old_behavior*1.4))
         elseif new_behavior < old_behavior*0.9
             new_behavior = Int16(ceil(old_behavior*0.9))
         end
-        agent.behavior = new_behavior#Int16(round(behavior_mean[model.properties[:days_passed]]))
-        #
-        # if(in(agent.id,[10,200,350,400,500,600]))
-        #     println("the new fear is $(new_fear), old fear is $(old_fear) a daily cases of $daily_cases")
-        #     println("agent behavior is $(agent.behavior) with attitude $attitude and social norm $mean_behavior ols behavior $old_behavior")
-        # end
+        agent.behavior = new_behavior
     end
 
     function transmit!(agent, model)
@@ -407,7 +388,7 @@ end
         else
             0.095
         end
-        #rate of secondary infections in household very high, Wei Li 2020, but at least contained to household
+        #rate of secondary infections in household is present (Wei Li 2020), but at least contained to household
         if agent.health_status == :Q
             if agent.behavior > 60
                 risk = 0.0063
@@ -451,7 +432,6 @@ end
         infect_people  == 0 && return
         #if we have drawn more people than available, set infect_people to all other agents
         length(node_contents) < infect_people && (infect_people = length(node_contents)-1)
-        #println("attempt to infect $infect_people people out of $contacts contacts in a $(length(node_contents)) long node with age $(agent.age)")
         timeout = infect_people*2
         t = 0
 

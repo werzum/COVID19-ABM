@@ -148,5 +148,8 @@ h2 = Plots.plot(fear_mean,label="Fear model", ribbon = (fear_mean.-fear_low,fear
 plot!(fear_real,label="Observed fear")
 plot!(behavior_mean,label="Behavior model", ribbon = (behavior_mean.-behavior_low,behavior_high.-behavior_mean))
 display(plot!(behavior_real,label="Observed behavior"))
-
 #Plots.png("Graphics\\Fear_behavior_h5")
+
+#estimate log growth rate on a per day basis
+growth = [log(infected_mean[i+1]-infected_mean[i]) for i in 1:100]
+Plots.plot(growth, label=false, xlabel="Day", ylabel="Logarithmic growth rate", seriescolor=:viridis)
