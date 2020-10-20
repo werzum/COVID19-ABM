@@ -138,10 +138,10 @@ plot!(infected_mean_old,label="infected_same_behavior", ribbon = (infected_mean_
 display(plot!(infected_mean,label="infected_individual_behavior", ribbon = (infected_mean.-infected_low,infected_high.-infected_mean),legend=:bottomright))
 
 #h5 plotting
-Plots.plot(infected_mean,label="Infected trend district Rostock", formatter = :plain,ribbon = (infected_mean.-infected_low,infected_mean.-infected_low),legend=:topleft,xlabel="Time in Days", ylabel="Total Infections",seriescolor=:viridis)
-plot!(infected_mean_old,label="Infected trend district Aachen", ribbon = (infected_mean_old.-infected_low_old,infected_high_old.-infected_mean_old))
+Plots.plot(infected_mean,label="Infected trend Tell Me", formatter = :plain,ribbon = (infected_mean.-infected_low,infected_mean.-infected_low),legend=:topleft,xlabel="Time in Days", ylabel="Total Infections",seriescolor=:viridis)
+plot!(infected_mean_old,label="Infected trend regular model", ribbon = (infected_mean_old.-infected_low_old,infected_high_old.-infected_mean_old))
 display(plot!(infected_real,label="Infected trend"))
-Plots.png("Graphics\\Infected_h1_district_comparison")
+Plots.png("Graphics\\Infected_h3_comparison")
 
 h2 = Plots.plot(fear_mean,label="Fear model", ribbon = (fear_mean.-fear_low,fear_high.-fear_low),legend=:topright, xlabel="Days", ylabel="Attribute Strength", seriescolor=:viridis)
 plot!(fear_real,label="Observed fear")
@@ -323,3 +323,7 @@ infection_age = [108, 93, 215, 162, 37, 93, 300, 148, 296, 211, 137, 300, 93, 10
 
 model_wealth = [agent.wealth for agent in allagents(model)]
 println(UnequalVarianceTTest(infection_age,model_wealth))
+
+household_distribution = Categorical([0.41889017788089716, 0.337949535962877, 0.11898201856148492, 0.09058391337973705, 0.03359435421500387])
+histogram(rand(household_distribution,10000),bins=1:5,normalize=true,label="Household size", ylabel="Probability in %")
+Plots.png("Graphics\\HouseholdHistogram")
