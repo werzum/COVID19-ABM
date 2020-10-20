@@ -1,5 +1,6 @@
 @everywhere function agent_week!(model, social_groups, distant_groups,steps,paint_mode)
-    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Int64[],behavior=Float32[],fear_over=Float32[],known_infected=Float32[],daily_cases=Int32[],daily_mobility=Int32[],daily_contact=Int32[],days_passed=Int32[],infected_adjusted=Int64[],IwS=Int64[])
+    #set up data structure to capture run infos
+    agent_data = DataFrame(step=Int64[],infected=Int64[],recovered=Int64[],susceptible=Int64[],mean_behavior=Int64[],mean_fear=Float32[],behavior=Float32[],fear_over=Float32[],known_infected=Float32[],daily_cases=Int32[],daily_mobility=Int32[],daily_contact=Int32[],days_passed=Int32[],infected_adjusted=Int64[],IwS=Int64[])
     infected_timeline = Vector{Int32}(undef,0)
     infected_timeline_growth = Vector{Int32}(undef,0)
     iws_timeline = Vector{Int32}(undef,0)
@@ -15,7 +16,7 @@
     for step in 1:steps
         for i in 1:7
             model.days_passed+=1
-            #send_messages(model.days_passed,attitude,norms)
+            send_messages(model.days_passed,attitude,norms)
             #select social&distant active groups randomly, more agents are social active on the weekend
             if i < 6
                 social_active_group = rand(social_groups,Int.(round.(length(social_groups)/10)))
@@ -55,7 +56,7 @@
             model.properties[:daily_cases] = 0
             #delay the reported infections by two days as Verzug COronadaten shows https://www.ndr.de/nachrichten/info/Coronavirus-Neue-Daten-stellen-Epidemie-Verlauf-infrage,corona2536.html
             #nowcast shows 3 days delay and 10% less infected as report delay
-            length(infected_timeline)<4 ? model.infected_reported=last(infected_timeline)*0.9 : model.infected_reported = infected_timeline[length(infected_timeline)-3]
+            length(infected_timeline)<4 ? model.infected_reported=round(last(infected_timeline)*0.9) : model.infected_reported = infected_timeline[length(infected_timeline)-3]
             # println("infected timeline is $infected_timeline")
             #println("infected growth is $infected_timeline_growth")
             # println("at time $(model.days_passed)")
@@ -91,11 +92,9 @@ end
     norm_message_frequency = round(norm_frequency(day,norms))
     #println("frequencys are $attitude_message_frequency for attitude and $norm_message_frequency for norms at day $day")
     if day % attitude_message_frequency == 0
-        #println("sent attitude!!!")
         send_attitude()
     end
     if day % norm_message_frequency == 0
-        #println("sent norms!!!")
         send_norms()
     end
 end
@@ -504,9 +503,6 @@ end
 
     data_to_collect = [(:health_status,infected),(:health_status,recovered),(:health_status,susceptible),(:behavior,mean_sentiment),(:fear,mean_sentiment),(:behavior,behavior),(:fear,fear_over),(:health_status,known_infected)]
     model_data_to_collect = [(:daily_cases),(:daily_mobility),(:daily_contact),(:days_passed)]
-
-    #preallocate some arrays
-    aquaintances_vector = Vector{Int64}(undef, length(all_agents))
     #run the model - agents go to work, collect data
     time_of_day = :work
     run!(model, move_step!, 1)

@@ -34,11 +34,11 @@ function draw_map(model,lat,long)
         b = Int16(round(scale(0,100,0,256,b)))
         b == 0 && (b = 1)
         b > 256 && (b = 256)
-        ncolor[i]=cgrad(:inferno)[b]
+        ncolor[i]=cgrad(:viridis)[b]
         #get infected agents#
         c = count(agent -> in(agent.health_status,(:E,:IwS,:Q,:NQ,:HS)),a)
         #set nodesize according to number of infected agents
-        length(a)==0 ? nodesizevec[i] = 0.5 : nodesizevec[i] = c*2
+        length(a)==0 ? nodesizevec[i] = 0.5 : nodesizevec[i] = c*3
         #b > 20 && println("for node $i color is $(ncolor[i]) while cgrad is $(cgrad(:inferno)[b]) with mean b $b and infected $(c)")
     end
     p = gplot(model.space.graph, long, lat, nodefillc=ncolor, nodesize=nodesizevec, edgestrokec=edgecolor)
@@ -113,8 +113,8 @@ export draw_map,draw_route,create_chart, create_gif
 
 # savefig examples
 #savefig("Graphics\\rostock_example.png")
-#using Compose
-#using Plots.PlotMeasures
+# using Compose
+# using Plots.PlotMeasures
 #route = draw_initial_map(model,lat,long)
 #draw(PNG("Graphics\\example_route.png",100PlotMeasures.cm,100PlotMeasures.cm),route)
-#set_default_graphic_size(40PlotMeasures.cm, 28PlotMeasures.cm)
+#set_default_graphic_size(100PlotMeasures.cm, 60PlotMeasures.cm)

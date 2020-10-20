@@ -136,7 +136,7 @@ function run_parallel(model,social_groups,distant_groups,steps,replicates)
         push!(infected_bars_mean, bs975ci[1][1])
     end
 
-    fear_real, behavior_real, infected_real = get_validation_data()
+            fear_real, behavior_real, infected_real = get_validation_data()
 
     #remove leftover data that somehov gets prepended to CI data
     timeline_gap = length(fear_mean)-steps*7+1
@@ -198,6 +198,3 @@ function run_parallel(model,social_groups,distant_groups,steps,replicates)
 
     return (fear_return,behavior_return,infected_return)
 end
-
-test = run_parallel(model,social_groups,distant_groups,16,14)
-#savefig("employees_per_workspace")
