@@ -10,7 +10,8 @@ SteppingFunction handles the model runs and contains the logic for agent actions
 
 #### Validation
 Validation provides functions to run the model for a given time with given instances and compare the results to real-world data. Behavior and Mobility data is taken from the COVID 19 Mobility Data provided by Apple. Fear data is taken from a YouGov survey, infection data from the RKI Covid 19 Dashboard.
-With that, a graph comparing the fear and behavior trend is produced:
+The following graph shows a comparison of the fear and behavior trends:
+
 ![Fear and behavior Aachen](Graphics/Fear_behavior_h1.png?raw=true "Fear and behavior Aachen")
 
 #### Model Components Overview
