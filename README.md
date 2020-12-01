@@ -10,10 +10,15 @@ SteppingFunction handles the model runs and contains the logic for agent actions
 
 #### Validation
 Validation provides functions to run the model for a given time with given instances and compare the results to real-world data. Behavior and Mobility data is taken from the COVID 19 Mobility Data provided by Apple. Fear data is taken from a YouGov survey, infection data from the RKI Covid 19 Dashboard.
+With that, a graph comparing the fear and behavior trend is produced:
+![Fear and behavior Aachen](Graphics/Fear_behavior_h1.png?raw=true "Fear and behavior Aachen")
 
 #### Model Components Overview
-
 ![Chart of model components](Graphics/ModelComponents.png?raw=true "Model Components Overview")
+
+#### Applied behavior model
+The behavioral model is based on the features determining behavior of the TELL ME project (Badham, Gilbert et al., 2015), that is fear, behavior and attitude, while giving more weight to the non-linear growth of the fear aspect as discussed by Epstein (2014). The following figure shows how agent behavior is determined:
+![Behavioral model](Graphics/BehaviorModel.png?raw=true "Behavioral Model")
 
 ### Set-Up Information
 
@@ -22,6 +27,8 @@ Different datasets are required for the set-up of the simulation. On request, I 
 
 ##### OpenStreetMap
 The easiest option I found is heading to [protomaps] (https://protomaps.com/extracts) and download a map of your selection. Then, use [this](https://wiki.openstreetmap.org/wiki/Osmconvert) converter tool to convert .osm.pbf to .osm. Other options would be going to openstreetmap.org/, but they limit the selectable map size to 50.000 nodes which is quite small, or download a county/country-sized dataset [here](https://download.geofabrik.de/).
+An example map looks like this:
+![Comparison chart of the maps of Aachen](Graphics/map_comparison.png?raw=true "Map Comparison")
 
 ##### Census
 Demographic information is taken from the German Census 2011. It provides information about the amount of inhabitants, the share of women, people over 65 and under 18 in each square of a grid of cells of Germany. In order to substitute this information, a CSV with bounding boxes in Min/Max Lat/Long format and #inhabitants, %women, %over65, %under18 is required. More information about the dataset (in German) can be found [here] (https://www.opengeodata.nrw.de/produkte/bevoelkerung/zensus2011/ergebnisse_1km-gitter/).
