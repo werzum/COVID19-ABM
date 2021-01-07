@@ -46,4 +46,5 @@ The protective behavior adoption was measured using [Apples Mobility Data](https
 For infection data, data from [OurWorldInData](https://ourworldindata.org/coronavirus-source-data) was used, though this can be easily substituted.
 
 #### Other Setup Requirements
-I modified the Agents.jl packacge individually to allow the addition of households to the model map after it was loaded. This can be done by making line the GraphSpace(line 26) mutable at .julia/packages/Agents/(...)/src/core/discrete_space.jl. The result should look like this: mutable struct GraphSpace{G} <: DiscreteSpace
+I modified the Agents.jl packacge individually to allow the addition of households to the model map after it was loaded. Therefore,
+the Agents Package should be loaded via Pkg.add("add https://github.com/werzum/Agents.jl"). Manually, this can be done by making line the GraphSpace(line 26) mutable at .julia/packages/Agents/(...)/src/core/discrete_space.jl. The result should look like this: mutable struct GraphSpace{G} <: DiscreteSpace
