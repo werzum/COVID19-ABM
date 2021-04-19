@@ -1,4 +1,4 @@
-# Julia - a COVID-19 ABM
+# COVID-19 ABM
 
 An agent-based model of the COVID epidemy in germany, with a focus on the influence of communication and individual behaviour. Agents.jl is used for the Agent Based Simulation.
 
